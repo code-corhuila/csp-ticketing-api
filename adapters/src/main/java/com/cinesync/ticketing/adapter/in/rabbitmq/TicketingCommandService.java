@@ -37,26 +37,30 @@ public class TicketingCommandService implements TicketingCommandUseCase {
 
     @Override
     @Transactional
-    public void handleUserRegistered(UUID userId, String email) {
-        log.info("Processing UserRegistered: userId={}, email={}", userId, email);
+    public void handleUserRegistered(UUID userId, String email, Instant occurredAt) {
+        log.info("Processing UserRegistered: userId={}, email={}, occurredAt={}", userId, email, occurredAt);
         UserContact contact = userContactRepository.findByUserId(userId)
                 .orElseGet(() -> UserContact.builder()
                         .userId(userId)
                         .email(email)
-                        .lastUpdatedAt(Instant.now())
+                        .lastUpdatedAt(occurredAt)
                         .build());
-        contact.updateEmail(email);
+        contact.updateEmail(email, occurredAt);
         userContactRepository.save(contact);
     }
 
     @Override
     @Transactional
-    public void handleUserEmailChanged(UUID userId, String email) {
-        log.info("Processing UserEmailChanged: userId={}, email={}", userId, email);
-        userContactRepository.findByUserId(userId).ifPresent(contact -> {
-            contact.updateEmail(email);
-            userContactRepository.save(contact);
-        });
+    public void handleUserEmailChanged(UUID userId, String email, Instant occurredAt) {
+        log.info("Processing UserEmailChanged: userId={}, email={}, occurredAt={}", userId, email, occurredAt);
+        UserContact contact = userContactRepository.findByUserId(userId)
+                .orElseGet(() -> UserContact.builder()
+                        .userId(userId)
+                        .email(email)
+                        .lastUpdatedAt(occurredAt)
+                        .build());
+        contact.updateEmail(email, occurredAt);
+        userContactRepository.save(contact);
     }
 
     @Override
