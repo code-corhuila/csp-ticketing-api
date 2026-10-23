@@ -1,9 +1,9 @@
-# csp-notification-api
+# csp-ticketing-api
 
-> notification bounded context: service API
+> Ticketing & Fulfillment bounded context: service API
 
-Part of the **LMS Library** distributed system — team `lms-library`, Grupo 2.
-Governance and documentation live in [`library-docs`](https://github.com/code-corhuila/library-docs).
+Part of the **CineSync Platform** distributed system.
+Governance and documentation live in [`csp-docs`](https://github.com/code-corhuila/csp-docs).
 
 ## Branching
 
@@ -12,7 +12,7 @@ branch and leave through a Pull Request.
 
 ```
 develop  <--PR--  feat/... fix/... chore/...
-qa       <--PR--  qa/...
+qa       <--PR--  qa-promote/...
 main     <--PR--  release/...  hotfix/...
 ```
 
@@ -22,4 +22,4 @@ branch into another: `merge develop -> qa` and `merge qa -> main` do not exist i
 `main` requires **1 approval from `ariel5253`**. On `develop` and `qa` the team sets its own review
 rule.
 
-Full policy: `00-governance/branching-policy.md` in `library-docs`.
+Full policy: `00-governance/branching-policy.md` in `csp-docs`.
