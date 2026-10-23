@@ -1,10 +1,14 @@
 package com.cinesync.ticketing.app.rest;
 
+import com.cinesync.ticketing.app.config.HealthStatusConverter;
 import com.cinesync.ticketing.core.model.Ticket;
 import com.cinesync.ticketing.core.model.TicketingFulfillment;
 import com.cinesync.ticketing.core.port.in.TicketQueryUseCase;
 import com.cinesync.ticketing.core.port.in.NotificationQueryUseCase;
 import lombok.RequiredArgsConstructor;
+import org.springframework.boot.actuate.health.Health;
+import org.springframework.boot.actuate.health.HealthEndpoint;
+import org.springframework.boot.actuate.health.Status;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
@@ -22,6 +26,7 @@ public class TicketingController {
 
     private final TicketQueryUseCase ticketQueryUseCase;
     private final NotificationQueryUseCase notificationQueryUseCase;
+    private final HealthEndpoint healthEndpoint;
 
     @GetMapping("/health")
     public ResponseEntity<Map<String, String>> health() {
@@ -29,13 +34,34 @@ public class TicketingController {
     }
 
     @GetMapping("/health/ready")
-    public ResponseEntity<Map<String, String>> ready() {
-        return ResponseEntity.ok(Map.of(
-                "status", "ok",
-                "database", "connected",
-                "broker", "connected",
-                "emailProvider", "connected"
-        ));
+    public ResponseEntity<Map<String, Object>> ready() {
+        // Check overall health
+        var healthComponent = healthEndpoint.health();
+        Health health = HealthStatusConverter.convert(healthComponent);
+
+        // Build readiness response
+        Map<String, Object> details = Map.of(
+                "status", health.getStatus().getCode(),
+                "database", getComponentStatus(health, "db"),
+                "broker", getComponentStatus(health, "rabbit"),
+                "emailProvider", getComponentStatus(health, "mail"),
+                "consumers", getComponentStatus(health, "consumers")
+        );
+
+        boolean ready = Status.UP.equals(health.getStatus());
+
+        return ready
+                ? ResponseEntity.ok(details)
+                : ResponseEntity.status(503).body(details);
+    }
+
+    private String getComponentStatus(Health health, String component) {
+        var detail = health.getDetails().get(component);
+        if (detail instanceof Map) {
+            Object status = ((Map<?, ?>) detail).get("status");
+            return status != null ? status.toString() : "UNKNOWN";
+        }
+        return "UNKNOWN";
     }
 
     @GetMapping("/me/tickets")
@@ -56,8 +82,6 @@ public class TicketingController {
             @RequestParam(defaultValue = "20") int limit
     ) {
         UUID userId = UUID.fromString(jwt.getSubject());
-        // Note: In real impl, we'd need a UserContactRepository to get userContactId from userId
-        // For now, this is a placeholder
         List<TicketingFulfillment> fulfillments = notificationQueryUseCase.getFulfillmentsByUser(userId, page, limit);
         return ResponseEntity.ok(new NotificationListResponse(fulfillments, page, limit, fulfillments.size()));
     }
