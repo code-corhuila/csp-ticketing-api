@@ -1,0 +1,5 @@
+com\cinesync\ticketing\app\config\TicketingConfiguration.class
+com\cinesync\ticketing\app\rest\TicketingController$TicketListResponse.class
+com\cinesync\ticketing\app\rest\TicketingController$NotificationListResponse.class
+com\cinesync\ticketing\app\rest\TicketingController.class
+com\cinesync\ticketing\app\TicketingApplication.class
