@@ -50,7 +50,7 @@ public class UserEventConsumer {
     @RabbitListener(queues = "${ticketing.rabbitmq.queue.booking-confirmed}")
     @Transactional
     public void onBookingConfirmed(String message) {
-        processEventSimple(message, "BookingConfirmed", payload -> {
+        processEvent(message, "BookingConfirmed", (payload, root) -> {
             UUID reservationId = UUID.fromString(payload.get("reservationId").asText());
             UUID userId = UUID.fromString(payload.get("userId").asText());
             UUID showtimeId = UUID.fromString(payload.get("showtimeId").asText());
@@ -63,10 +63,11 @@ public class UserEventConsumer {
             } catch (com.fasterxml.jackson.core.JsonProcessingException e) {
                 throw new RuntimeException("Invalid seatNumbers JSON", e);
             }
+            String correlationId = root.path("metadata").path("correlationId").asText(null);
 
             commandUseCase.handleBookingConfirmed(
                     reservationId, userId, showtimeId, movieTitle, roomName,
-                    showtimeStartsAt, seatNumbers
+                    showtimeStartsAt, seatNumbers, correlationId
             );
         });
     }
