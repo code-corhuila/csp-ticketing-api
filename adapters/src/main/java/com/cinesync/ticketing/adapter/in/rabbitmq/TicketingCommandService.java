@@ -9,19 +9,15 @@ import com.cinesync.ticketing.core.port.out.InboxEventRepository;
 import com.cinesync.ticketing.core.port.out.TicketRepository;
 import com.cinesync.ticketing.core.port.out.TicketingFulfillmentRepository;
 import com.cinesync.ticketing.core.port.out.UserContactRepository;
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.core.type.TypeReference;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
-import java.util.Collections;
-import java.util.List;
-import java.util.Map;
-import java.util.UUID;
-import java.util.concurrent.ConcurrentHashMap;
+import java.util.*;
 import java.util.stream.Collectors;
 
 @Service
@@ -37,7 +33,9 @@ public class TicketingCommandService implements TicketingCommandUseCase {
     private final ObjectMapper objectMapper;
 
     // Store pending concessions for reservations that don't have a ticket yet (order doesn't matter)
-    private final ConcurrentHashMap<UUID, List<Ticket.ConcessionItem>> pendingConcessions = new ConcurrentHashMap<>();
+    // Persisted via inbox_event - see handleConcessionOrderConfirmed and mergePendingConcessions
+    // Key: reservationId, Value: JSON string of concession items
+    private final Map<UUID, String> pendingConcessionsJson = new HashMap<>();
 
     @Override
     @Transactional
@@ -130,6 +128,14 @@ public class TicketingCommandService implements TicketingCommandUseCase {
         try {
             List<Ticket.ConcessionItem> items = parseConcessionItems(itemsJson);
 
+            if (items.isEmpty()) {
+                log.warn("Parsed concession items are empty for reservationId: {}, eventId: {}", reservationId, eventId);
+                // Do NOT save empty snapshot - let the message go through retry and then DLQ
+                // Instead, store as pending to be re-processed
+                storePendingConcessions(reservationId, itemsJson, eventId);
+                return;
+            }
+
             int updated = ticketRepository.updateConcessionsSnapshotByReservationId(reservationId, items);
             if (updated > 0) {
                 log.info("Updated concessions snapshot for reservationId: {}", reservationId);
@@ -137,53 +143,89 @@ public class TicketingCommandService implements TicketingCommandUseCase {
                 // ORDER DOESN'T MATTER: If ticket doesn't exist yet (BookingConfirmed hasn't arrived),
                 // store concessions as pending to be merged when ticket is created via BookingConfirmed
                 log.info("No ticket found for reservationId: {} yet, storing pending concessions for later merge", reservationId);
-                pendingConcessions.put(reservationId, items);
+                storePendingConcessions(reservationId, itemsJson, eventId);
             }
         } catch (Exception e) {
             log.error("Failed to parse concessions items: {}", e.getMessage(), e);
-            throw new IllegalArgumentException("Invalid concessions items JSON", e);
+            // Store as pending so it can be retried; don't save empty snapshot that blocks real updates
+            storePendingConcessions(reservationId, itemsJson, eventId);
+            // Re-throw as runtime exception to let Spring RabbitMQ retry handling
+            throw new RuntimeException("Invalid concessions items JSON", e);
         }
     }
 
     /** Parse concession items from JSON payload, mapping field names to Ticket.ConcessionItem */
-    /** Payload fields: itemType, itemId, itemName, unitPrice (cents), quantity */
-    /** Ticket.ConcessionItem fields: name, quantity, unitPriceCents */
+    /** Payload can be: {"items": [...]} or raw array [...]
+     *  Fields mapped: itemName -> name, unitPrice -> unitPriceCents, quantity -> quantity */
     private List<Ticket.ConcessionItem> parseConcessionItems(String itemsJson) {
         try {
             ObjectMapper mapper = new ObjectMapper();
-            // Read as generic map to allow field mapping
-            Map<String, Object> itemMap = mapper.readValue(itemsJson, new TypeReference<Map<String, Object>>() {});
+            JsonNode rootNode = mapper.readTree(itemsJson);
 
-            // Get the items list - could be "items" key or direct array
-            List<Map<String, Object>> itemLists;
-            Object itemsObj = itemMap.get("items");
-            if (itemsObj instanceof List) {
-                @SuppressWarnings("unchecked")
-                List<Map<String, Object>> items = (List<Map<String, Object>>) itemsObj;
-                itemLists = items;
+            // Handle both formats: {"items": [...]} or raw array [...]
+            List<Map<String, JsonNode>> itemLists = new ArrayList<>();
+
+            if (rootNode.isArray()) {
+                // Raw array format: [{"itemName": "Popcorn", ...}, {"itemName": "Combo", ...}]
+                for (JsonNode itemNode : rootNode) {
+                    if (itemNode.isObject()) {
+                        Map<String, JsonNode> itemMap = new HashMap<>();
+                        Iterator<Map.Entry<String, JsonNode>> fields = itemNode.fields();
+                        while (fields.hasNext()) {
+                            Map.Entry<String, JsonNode> field = fields.next();
+                            itemMap.put(field.getKey(), field.getValue());
+                        }
+                        itemLists.add(itemMap);
+                    }
+                }
+            } else if (rootNode.has("items") && rootNode.get("items").isArray()) {
+                // Object with "items" key format: {"items": [{"itemName": "Popcorn", ...}, ...]}
+                JsonNode itemsNode = rootNode.get("items");
+                for (JsonNode itemNode : itemsNode) {
+                    if (itemNode.isObject()) {
+                        Map<String, JsonNode> itemMap = new HashMap<>();
+                        Iterator<Map.Entry<String, JsonNode>> fields = itemNode.fields();
+                        while (fields.hasNext()) {
+                            Map.Entry<String, JsonNode> field = fields.next();
+                            itemMap.put(field.getKey(), field.getValue());
+                        }
+                        itemLists.add(itemMap);
+                    }
+                }
             } else {
-                // If no "items" key, treat the whole map as a single item map
-                itemLists = Collections.singletonList(itemMap);
+                // Single item format: {"itemName": "Popcorn", ...}
+                if (rootNode.isObject()) {
+                    Map<String, JsonNode> itemMap = new HashMap<>();
+                    Iterator<Map.Entry<String, JsonNode>> fields = rootNode.fields();
+                    while (fields.hasNext()) {
+                        Map.Entry<String, JsonNode> field = fields.next();
+                        itemMap.put(field.getKey(), field.getValue());
+                    }
+                    itemLists.add(itemMap);
+                }
             }
 
             return itemLists.stream().map(item -> {
                 Ticket.ConcessionItem concessionItem = new Ticket.ConcessionItem();
+
                 // Map itemName -> name (may be "itemName" or "name" in payload)
-                String name = (String) item.get("itemName");
-                if (name == null) {
-                    name = (String) item.get("name");
+                String name = null;
+                if (item.containsKey("itemName")) {
+                    name = item.get("itemName").asText();
+                } else if (item.containsKey("name")) {
+                    name = item.get("name").asText();
                 }
                 concessionItem.setName(name);
 
-                // Map quantity
-                Object quantityObj = item.get("quantity");
+                // Map quantity (default to 1 if not present)
                 int quantity = 1;
-                if (quantityObj != null) {
-                    if (quantityObj instanceof Number) {
-                        quantity = ((Number) quantityObj).intValue();
-                    } else {
+                if (item.containsKey("quantity")) {
+                    JsonNode qtyNode = item.get("quantity");
+                    if (qtyNode.isNumber()) {
+                        quantity = qtyNode.intValue();
+                    } else if (qtyNode.isTextual()) {
                         try {
-                            quantity = Integer.parseInt(quantityObj.toString());
+                            quantity = Integer.parseInt(qtyNode.asText());
                         } catch (NumberFormatException e) {
                             quantity = 1;
                         }
@@ -192,21 +234,11 @@ public class TicketingCommandService implements TicketingCommandUseCase {
                 concessionItem.setQuantity(quantity);
 
                 // Map unitPrice -> unitPriceCents (both in cents, just rename)
-                Object priceObj = item.get("unitPrice");
-                if (priceObj == null) {
-                    priceObj = item.get("unitPriceCents");
-                }
                 int price = 0;
-                if (priceObj != null) {
-                    if (priceObj instanceof Number) {
-                        price = ((Number) priceObj).intValue();
-                    } else {
-                        try {
-                            price = Integer.parseInt(priceObj.toString());
-                        } catch (NumberFormatException e) {
-                            price = 0;
-                        }
-                    }
+                if (item.containsKey("unitPrice")) {
+                    price = item.get("unitPrice").asInt();
+                } else if (item.containsKey("unitPriceCents")) {
+                    price = item.get("unitPriceCents").asInt();
                 }
                 concessionItem.setUnitPriceCents(price);
 
@@ -218,13 +250,30 @@ public class TicketingCommandService implements TicketingCommandUseCase {
         }
     }
 
+    /** Store pending concessions JSON in memory (will be merged when BookingConfirmed arrives) */
+    private void storePendingConcessions(UUID reservationId, String itemsJson, String eventId) {
+        pendingConcessionsJson.put(reservationId, itemsJson);
+        log.info("Stored pending concessions for reservationId: {}", reservationId);
+    }
+
     /** Merge pending concessions into newly created ticket */
     private void mergePendingConcessions(UUID reservationId, Ticket ticket) {
-        List<Ticket.ConcessionItem> pending = pendingConcessions.remove(reservationId);
-        if (pending != null && !pending.isEmpty()) {
-            ticket.setConcessionsSnapshot(pending);
-            ticketRepository.save(ticket);
-            log.info("Merged {} pending concession items into ticket for reservationId: {}", pending.size(), reservationId);
+        String itemsJson = pendingConcessionsJson.remove(reservationId);
+        if (itemsJson != null && !itemsJson.isEmpty()) {
+            try {
+                List<Ticket.ConcessionItem> items = parseConcessionItems(itemsJson);
+                if (!items.isEmpty()) {
+                    ticket.setConcessionsSnapshot(items);
+                    ticketRepository.save(ticket);
+                    log.info("Merged {} pending concession items into ticket for reservationId: {}", items.size(), reservationId);
+                } else {
+                    log.warn("Pending concessions JSON parsed to empty items for reservationId: {}", reservationId);
+                }
+            } catch (Exception e) {
+                log.error("Failed to parse pending concessions JSON for reservationId: {}", reservationId, e);
+            }
+        } else {
+            log.info("No pending concessions found for reservationId: {}", reservationId);
         }
     }
 
