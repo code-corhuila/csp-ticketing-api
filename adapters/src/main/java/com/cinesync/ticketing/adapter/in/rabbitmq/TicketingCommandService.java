@@ -113,8 +113,16 @@ public class TicketingCommandService implements TicketingCommandUseCase {
 
     @Override
     @Transactional
-    public void handleConcessionOrderConfirmed(UUID reservationId, String itemsJson) {
-        log.info("Processing ConcessionOrderConfirmed for reservationId: {}", reservationId);
+    public void handleConcessionOrderConfirmed(UUID reservationId, String itemsJson, String eventId, String correlationId) {
+        log.info("Processing ConcessionOrderConfirmed: reservationId={}, eventId={}, correlationId={}", reservationId, eventId, correlationId);
+
+        // 1. DEDUP: If already processed, skip (using tryInsert pattern from inbox_event)
+        UUID eventIdUuid = UUID.fromString(eventId);
+        if (!inboxEventRepository.tryInsert(eventIdUuid, "ConcessionOrderConfirmed")) {
+            log.info("ConcessionOrderConfirmed already processed: eventId={}", eventId);
+            return;
+        }
+
         try {
             List<Ticket.ConcessionItem> items = objectMapper.readValue(itemsJson,
                     objectMapper.getTypeFactory().constructCollectionType(List.class, Ticket.ConcessionItem.class));
@@ -123,7 +131,9 @@ public class TicketingCommandService implements TicketingCommandUseCase {
             if (updated > 0) {
                 log.info("Updated concessions snapshot for reservationId: {}", reservationId);
             } else {
-                log.warn("No ticket found for reservationId: {}, concessions will be merged when ticket is created", reservationId);
+                // 3. ORDER DOESN'T MATTER: If ticket doesn't exist yet (BookingConfirmed hasn't arrived),
+                //    the snapshot will be merged when the ticket is created via BookingConfirmed
+                log.info("No ticket found for reservationId: {} yet, concessions snapshot will be merged on ticket creation", reservationId);
             }
         } catch (Exception e) {
             log.error("Failed to parse concessions items: {}", e.getMessage(), e);

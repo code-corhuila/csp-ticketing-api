@@ -66,6 +66,7 @@ ticketing:
     routing-key:
       booking-confirmed: cine.booking.booking-confirmed.v1
       ticket-issued: cine.ticketing_fulfillment.ticket-issued.v1
+      concession-order-confirmed: cine.concessions.order-confirmed.v1
     queue:
       user-registered: ticketing.user-registered
       user-email-changed: ticketing.user-email-changed
@@ -75,13 +76,13 @@ ticketing:
       dlq: ticketing.dlq
     # Queue declaration at startup (before relay enabled)
     declare-at-startup: true
-    # Consumer recovery config
+    # Consumer recovery config (ADR-007: 3 retries with growing delay, then DLQ)
     consumer:
       recovery:
         initial-interval-ms: 1000
         max-interval-ms: 30000
         multiplier: 2.0
-        max-attempts: 0  # 0 = unlimited
+        max-attempts: 3  # ADR-007: 3 retries then DLQ
       cancel:
         log-warn: true
 
