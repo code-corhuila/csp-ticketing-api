@@ -270,14 +270,15 @@ public class TicketingCommandService implements TicketingCommandUseCase {
                     ticket.setConcessionsSnapshot(items);
                     ticketRepository.save(ticket);
                     log.info("Merged {} pending concession items into ticket for reservationId: {}", items.size(), reservationId);
+                    // Only delete on successful merge
+                    pendingConcessionOrderRepository.deleteByReservationId(reservationId);
                 } else {
-                    log.warn("Pending concessions JSON parsed to empty items for reservationId: {}", reservationId);
+                    log.warn("Pending concessions JSON parsed to empty items for reservationId: {}, keeping pending for retry", reservationId);
+                    // Do NOT delete - keep pending for potential retry
                 }
             } catch (Exception e) {
-                log.error("Failed to parse pending concessions JSON for reservationId: {}", reservationId, e);
-            } finally {
-                // Always clean up pending order after attempting merge
-                pendingConcessionOrderRepository.deleteByReservationId(reservationId);
+                log.error("Failed to parse pending concessions JSON for reservationId: {}, keeping pending for retry", reservationId, e);
+                // Do NOT delete on parse failure - keep pending for potential retry
             }
         } else {
             log.info("No pending concessions found in DB for reservationId: {}", reservationId);
