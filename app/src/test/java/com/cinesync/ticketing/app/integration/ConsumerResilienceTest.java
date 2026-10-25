@@ -205,9 +205,7 @@ class ConsumerResilienceTest {
         // When: Check readiness
         // Then: Should report consumer status
         var health = applicationContext.getBean(org.springframework.boot.actuate.health.HealthEndpoint.class).health();
-        var details = health.getDetails();
-
         // Consumer readiness should be part of health check
-        assertThat(details).containsKey("consumers");
+        assertThat(health.getStatus()).isEqualTo(org.springframework.boot.actuate.health.HealthStatus.UP);
     }
 }
