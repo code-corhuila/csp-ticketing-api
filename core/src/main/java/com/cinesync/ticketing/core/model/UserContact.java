@@ -6,6 +6,7 @@ import org.hibernate.annotations.CreationTimestamp;
 import org.hibernate.annotations.UpdateTimestamp;
 
 import java.time.Instant;
+import java.util.Locale;
 import java.util.UUID;
 
 @Entity
@@ -39,8 +40,30 @@ public class UserContact {
     @Column(name = "updated_at", nullable = false)
     private Instant updatedAt;
 
-    public void updateEmail(String newEmail, Instant occurredAt) {
-        this.email = newEmail;
+    public static UserContact of(UUID userId, String email, Instant occurredAt) {
+        return UserContact.builder()
+                .userId(userId)
+                .email(normalize(email))
+                .lastUpdatedAt(occurredAt)
+                .build();
+    }
+
+    /**
+     * Applies an email from an Auth event only if the event is newer than the last one applied,
+     * so a redelivered or out-of-order event never overwrites a newer address.
+     *
+     * @return true when the contact changed
+     */
+    public boolean applyChange(String newEmail, Instant occurredAt) {
+        if (!occurredAt.isAfter(lastUpdatedAt)) {
+            return false;
+        }
+        this.email = normalize(newEmail);
         this.lastUpdatedAt = occurredAt;
+        return true;
+    }
+
+    private static String normalize(String email) {
+        return email.trim().toLowerCase(Locale.ROOT);
     }
 }
