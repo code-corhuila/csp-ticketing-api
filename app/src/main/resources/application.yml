@@ -42,47 +42,42 @@ spring:
     username: ${RABBITMQ_USER:guest}
     password: ${RABBITMQ_PASS:guest}
     virtual-host: ${RABBITMQ_VHOST:/}  # Use %2F in AMQP URL for default vhost
+    connection-timeout: 10000
+    requested-heartbeat: 60
     listener:
       simple:
-        acknowledge-mode: manual
+        # The listeners return normally on success and throw on failure, so the container acks or rejects.
+        acknowledge-mode: auto
         retry:
           enabled: true
+          # ADR-007: attempt 2 after 5 s, attempt 3 after 25 s, then the message is dead-lettered
           initial-interval: 5000
-          max-interval: 60000
-          multiplier: 2
+          max-interval: 25000
+          multiplier: 5
           max-attempts: 3
         missing-queues-fatal: false
         auto-startup: true
         default-requeue-rejected: false
 
-  # RabbitMQ connection factory config for recovery
-  rabbitmq:
-    connection-timeout: 10000
-    requested-heartbeat: 60
-
 ticketing:
   rabbitmq:
     exchange: cine.events
     routing-key:
+      user-registered: cine.auth.user-registered.v1
+      user-email-changed: cine.auth.user-email-changed.v1
       booking-confirmed: cine.booking.booking-confirmed.v1
       ticket-issued: cine.ticketing_fulfillment.ticket-issued.v1
       concession-order-confirmed: cine.concessions.order-confirmed.v1
     queue:
-      user-registered: ticketing.user-registered
-      user-email-changed: ticketing.user-email-changed
+      user-registered: cine.ticketing_fulfillment.user-registered
+      user-email-changed: cine.ticketing_fulfillment.user-email-changed
       booking-confirmed: ticketing.booking-confirmed.v1
       concession-order-confirmed: ticketing.concession-order-confirmed
       ticket-issued: ticketing.ticket-issued
       dlq: ticketing.dlq
     # Queue declaration at startup (before relay enabled)
     declare-at-startup: true
-    # Consumer recovery config (ADR-007: 3 retries with growing delay, then DLQ)
     consumer:
-      recovery:
-        initial-interval-ms: 1000
-        max-interval-ms: 30000
-        multiplier: 2.0
-        max-attempts: 3  # ADR-007: 3 retries then DLQ
       cancel:
         log-warn: true
 

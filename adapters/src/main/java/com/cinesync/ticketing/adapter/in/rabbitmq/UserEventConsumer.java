@@ -28,23 +28,28 @@ public class UserEventConsumer {
     @RabbitListener(queues = "${ticketing.rabbitmq.queue.user-registered}")
     @Transactional
     public void onUserRegistered(String message) {
-        processEvent(message, "UserRegistered", (payload, root) -> {
-            UUID userId = UUID.fromString(payload.get("userId").asText());
-            String email = payload.get("email").asText();
-            Instant occurredAt = Instant.parse(root.path("occurredAt").asText());
-            commandUseCase.handleUserRegistered(userId, email, occurredAt);
-        });
+        applyOnce(UserContactEvent.parse(message, objectMapper, "UserRegistered"), "UserRegistered",
+                commandUseCase::handleUserRegistered);
     }
 
     @RabbitListener(queues = "${ticketing.rabbitmq.queue.user-email-changed}")
     @Transactional
     public void onUserEmailChanged(String message) {
-        processEvent(message, "UserEmailChanged", (payload, root) -> {
-            UUID userId = UUID.fromString(payload.get("userId").asText());
-            String email = payload.get("email").asText();
-            Instant occurredAt = Instant.parse(root.path("occurredAt").asText());
-            commandUseCase.handleUserEmailChanged(userId, email, occurredAt);
-        });
+        applyOnce(UserContactEvent.parse(message, objectMapper, "UserEmailChanged"), "UserEmailChanged",
+                commandUseCase::handleUserEmailChanged);
+    }
+
+    private void applyOnce(UserContactEvent event, String eventType, ContactChange change) {
+        if (!inboxEventRepository.tryInsert(event.eventId(), eventType)) {
+            log.info("Duplicate eventId {} for {}, skipping", event.eventId(), eventType);
+            return;
+        }
+        change.apply(event.userId(), event.email(), event.occurredAt());
+    }
+
+    @FunctionalInterface
+    private interface ContactChange {
+        void apply(UUID userId, String email, Instant occurredAt);
     }
 
     @RabbitListener(queues = "${ticketing.rabbitmq.queue.booking-confirmed}")
@@ -108,27 +113,4 @@ public class UserEventConsumer {
         }
     }
 
-    private void processEventSimple(String message, String eventType, java.util.function.Consumer<JsonNode> handler) {
-        try {
-            JsonNode root = objectMapper.readTree(message);
-            UUID eventId = UUID.fromString(root.get("eventId").asText());
-            JsonNode payload = root.get("payload");
-
-            if (!inboxEventRepository.tryInsert(eventId, eventType)) {
-                log.info("Duplicate eventId {} for {}, skipping", eventId, eventType);
-                return;
-            }
-
-            handler.accept(payload);
-
-        } catch (Exception e) {
-            log.error("Failed to process {} event: {}", eventType, e.getMessage(), e);
-            throw new RuntimeException("Event processing failed", e);
-        }
-    }
-
-    @FunctionalInterface
-    private interface EventHandler {
-        void handle(JsonNode payload, JsonNode root) throws Exception;
-    }
 }
