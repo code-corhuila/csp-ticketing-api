@@ -49,6 +49,28 @@ class TicketEmailTest {
         assertThat(TicketEmail.of(ticket().concessionsSnapshot(List.of(popcorn)).build(), PORTAL).htmlBody())
                 .contains("Popcorn x2");
         assertThat(TicketEmail.of(ticket().build(), PORTAL).htmlBody()).doesNotContain("Concessions");
+        assertThat(TicketEmail.of(ticket().concessionsSnapshot(List.of()).build(), PORTAL).htmlBody())
+                .doesNotContain("Concessions");
+    }
+
+    @Test
+    void severalConcessionLines_areListedInOrderWithoutTheirPrice() {
+        List<Ticket.ConcessionItem> lines = List.of(
+                Ticket.ConcessionItem.builder().name("Popcorn").quantity(2).unitPriceCents(500).build(),
+                Ticket.ConcessionItem.builder().name("Family combo").quantity(1).unitPriceCents(1500).build());
+
+        String body = TicketEmail.of(ticket().concessionsSnapshot(lines).build(), PORTAL).htmlBody();
+
+        assertThat(body).contains("Concessions:</b> Popcorn x2, Family combo x1");
+        assertThat(body).doesNotContain("500").doesNotContain("1500");
+    }
+
+    @Test
+    void aConcessionName_isEscaped() {
+        Ticket.ConcessionItem item = Ticket.ConcessionItem.builder().name("<b>Popcorn</b> & more").quantity(1).build();
+
+        assertThat(TicketEmail.of(ticket().concessionsSnapshot(List.of(item)).build(), PORTAL).htmlBody())
+                .contains("&lt;b&gt;Popcorn&lt;/b&gt; &amp; more x1");
     }
 
     @Test
