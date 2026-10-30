@@ -38,6 +38,26 @@ The service keeps a local `userId -> email` projection fed by two Auth events, p
 - The `eventId` is stored in `inbox_event` in the same transaction, so a redelivery has no effect.
 - A message that is not valid JSON, or lacks `eventId`, `occurredAt`, `payload.userId` or a valid `payload.email`, is dead-lettered at once. Any other failure is retried (attempt 2 after 5 s, attempt 3 after 25 s) and then dead-lettered.
 
+## Authentication (norm 5.3.7, ADR-042, ADR-056)
+
+The service validates every token by itself with the public key of the identity service: RS256 only (`none`, HS256 and any other
+algorithm are rejected), `exp` and `sub` required, 30 s of clock skew. It starts only with the key.
+
+| Variable | Meaning |
+|---|---|
+| `JWT_PUBLIC_KEY` | PEM of the public key, on one line with `\n` or with line breaks |
+| `JWT_PUBLIC_KEY_FILE` | Path of a file with the PEM, when the platform mounts it instead (one of the two is required) |
+| `SERVICE_SUBJECTS` | Subjects of the service credentials that may call the internal operations; `csp-worker` by default |
+
+| Routes | Who may call | Rejection |
+|---|---|---|
+| `/api/v1/ticketing/health`, `/health/ready` | anyone | none |
+| `/api/v1/ticketing/me/**` | a user token (its `sub` is the user id) with the permission `ticket:read:self` | `401`; `403` without the permission |
+| `/internal/**` | a service credential: issuer `csp-auth`, audience `csp-internal`, `sub` in `SERVICE_SUBJECTS` | `401` for any other token (a user token is never a service credential); `403` for a valid credential of another subject |
+
+A rejection answers the single error envelope (`UNAUTHORIZED` or `FORBIDDEN`) and never reaches a controller. Everything else, such as
+`/actuator/**`, needs a user token.
+
 ## Tests
 
 ```bash
