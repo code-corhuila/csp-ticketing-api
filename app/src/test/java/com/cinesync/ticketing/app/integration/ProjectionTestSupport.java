@@ -8,6 +8,7 @@ import com.cinesync.ticketing.app.config.ConsumerLifecycleListener;
 import com.cinesync.ticketing.app.config.ConsumerReadinessIndicator;
 import com.cinesync.ticketing.app.config.TicketingConfiguration;
 import com.cinesync.ticketing.core.model.UserContact;
+import com.cinesync.ticketing.core.port.out.EmailSenderPort;
 import org.springframework.amqp.core.Message;
 import org.springframework.amqp.core.MessageBuilder;
 import org.springframework.amqp.core.MessageProperties;
@@ -16,6 +17,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.autoconfigure.EnableAutoConfiguration;
 import org.springframework.boot.autoconfigure.domain.EntityScan;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.boot.test.mock.mockito.SpyBean;
 import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
 import org.springframework.context.annotation.Configuration;
@@ -32,7 +34,7 @@ import java.util.UUID;
 
 /**
  * Real RabbitMQ and PostgreSQL plus the consumers of the service: the listeners, the command service, the
- * repositories and the RabbitMQ topology. Nothing is mocked. Events are published the way the
+ * repositories and the RabbitMQ topology. Only the email sender is mocked. Events are published the way the
  * csp-worker relay publishes them: exchange cine.events, application/json.
  *
  * <p>The containers are started once and shared, and every subclass uses this same Spring context, so there
@@ -78,6 +80,10 @@ abstract class ProjectionTestSupport {
     /** Spied so a test can hold a message in processing; it calls the real method unless stubbed. */
     @SpyBean
     TicketingCommandService commandService;
+
+    /** The only thing that is not real: no SMTP server runs in the tests. */
+    @MockBean
+    EmailSenderPort emailSender;
 
     @Autowired
     RabbitTemplate rabbitTemplate;

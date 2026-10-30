@@ -16,12 +16,13 @@ import java.util.UUID;
 @Repository
 public interface TicketingFulfillmentJpaRepository extends JpaRepository<TicketingFulfillment, UUID>, TicketingFulfillmentRepository {
     @Query("SELECT f FROM TicketingFulfillment f WHERE f.status = :status "
-            + "AND (f.nextRetryAt IS NULL OR f.nextRetryAt <= :now) ORDER BY f.createdAt")
+            + "AND (f.nextRetryAt IS NULL OR f.nextRetryAt <= :now) "
+            + "AND f.ticketId IN (SELECT t.id FROM Ticket t WHERE t.pdfUrl IS NOT NULL) ORDER BY f.createdAt")
     List<TicketingFulfillment> findDue(@Param("status") TicketingFulfillment.FulfillmentStatus status,
                                        @Param("now") Instant now, Pageable pageable);
 
     @Override
-    default List<TicketingFulfillment> findPendingForRetry(Instant now, int limit) {
+    default List<TicketingFulfillment> findDeliverable(Instant now, int limit) {
         return findDue(TicketingFulfillment.FulfillmentStatus.PENDING, now, PageRequest.of(0, limit));
     }
 }
