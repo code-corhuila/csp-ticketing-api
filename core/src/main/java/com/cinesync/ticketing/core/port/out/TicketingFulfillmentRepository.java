@@ -9,6 +9,8 @@ import java.util.UUID;
 
 public interface TicketingFulfillmentRepository {
     TicketingFulfillment save(TicketingFulfillment fulfillment);
+    Optional<TicketingFulfillment> findById(UUID id);
     Optional<TicketingFulfillment> findByTicketId(UUID ticketId);
-    List<TicketingFulfillment> findPendingForRetry(Instant now, int limit);
+    /** Pending deliveries that are due and whose ticket already has its PDF, oldest first. */
+    List<TicketingFulfillment> findDeliverable(Instant now, int limit);
 }
