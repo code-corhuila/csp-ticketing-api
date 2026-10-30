@@ -3,7 +3,9 @@ package com.cinesync.ticketing.core.model;
 import jakarta.persistence.*;
 import lombok.*;
 import org.hibernate.annotations.CreationTimestamp;
+import org.hibernate.annotations.JdbcTypeCode;
 import org.hibernate.annotations.UpdateTimestamp;
+import org.hibernate.type.SqlTypes;
 
 import java.time.Instant;
 import java.util.List;
@@ -41,9 +43,11 @@ public class Ticket {
     @Column(name = "showtime_starts_at", nullable = false)
     private Instant showtimeStartsAt;
 
+    @JdbcTypeCode(SqlTypes.JSON)
     @Column(name = "seat_labels_snapshot", nullable = false, columnDefinition = "jsonb")
     private List<String> seatLabelsSnapshot;
 
+    @JdbcTypeCode(SqlTypes.JSON)
     @Column(name = "concessions_snapshot", columnDefinition = "jsonb")
     private List<ConcessionItem> concessionsSnapshot;
 

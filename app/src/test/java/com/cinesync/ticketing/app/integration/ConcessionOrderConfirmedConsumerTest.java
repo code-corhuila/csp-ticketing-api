@@ -287,8 +287,8 @@ class ConcessionOrderConfirmedConsumerTest {
         });
 
         // Verify only one inbox event recorded (idempotency)
-        var inboxEvent = inboxEventRepository.findByEventId(UUID.fromString(eventId));
-        assertThat(inboxEvent).isPresent();
+        var duplicateInboxEvent = inboxEventRepository.findByEventId(UUID.fromString(eventId));
+        assertThat(duplicateInboxEvent).isPresent();
     }
 
     /**
