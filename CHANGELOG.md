@@ -15,6 +15,7 @@
 - The internal routes answer with the platform error envelope (`error`, `message`, `details`, `traceId`). They are still not authenticated: the service-token check is `csp-ticketing-api#12`.
 
 ### Removed
+- `GET /me/tickets` and `GET /me/notifications` and the ports `TicketQueryUseCase` and `NotificationQueryUseCase`: they had no implementation, no test and no story in this repository (the contract keeps them for HU-TICKETING-005 and the ticket list of the portal), and they serialized entities. The download of a ticket PDF, `GET /me/tickets/{ticketId}/pdf`, stays.
 - `EventPublisherPort` and `RabbitEventPublisher`: the API no longer publishes to the broker (norm 5.3.11).
 
 ### Changed
@@ -23,6 +24,10 @@
 - `BookingConfirmed` is validated like the Auth events: a message that can never succeed goes to the dead-letter queue without retries.
 
 ### Fixed
+- The service starts (HU-TICKETING-002): `TicketingController` needed `TicketQueryUseCase` and `NotificationQueryUseCase`, which nothing implemented, so the application context could not be built and `TicketingApplicationTests` failed in `develop`. That test is now a real one (PostgreSQL with the schema and RabbitMQ in containers, the real configuration) and passes.
+- `GET /health/ready` reports the real state of `database`, `broker`, `consumers`, `emailProvider` and `objectStorage`; it reported `UNKNOWN` for all of them because the converter looked for details that a composite health does not have, and `HealthStatusConverter` is gone. The mail sender is declared as `JavaMailSenderImpl`, so the mail health indicator of Spring Boot is registered and `emailProvider` is no longer always unknown.
+- The service no longer declares the exchanges `cine.events` and `cine.dlx` (ADR-036): they belong to `csp-infra-rabbitmq` and the login `ticketing_fulfillment` may configure only `cine.ticketing_fulfillment.*`, so against the real broker the declaration was refused with `ACCESS_REFUSED` and no queue or consumer started. The bindings use the exchanges by name. `TicketingQueuesTest` checks it (HU-TICKETING-002).
+- The reader of the ticket PDFs gives the region of the storage (`OBJECT_STORAGE_REGION`, `us-east-1` by default) to the S3 client. Without it the client asked for the location of the bucket first, which the read-only account (get on `tickets/*`) may not do, so every read and the readiness check failed with `AccessDenied` against `csp-infra-rustfs`. `S3TicketPdfStorageRequestsTest` checks that a read sends only the `GET` of its key and the check only the `GET` of its probe (HU-TICKETING-002). The bucket check is a `GET` and not a `HEAD`: with the region given, a `HEAD` cannot tell a missing bucket from a missing key, and only the error body does.
 - The `TicketIssued` queue is named `cine.ticketing_fulfillment.ticket-issued` and has its own dead-letter queue `.dlq`, like the other queues (ADR-007, ADR-036). It was `ticketing.ticket-issued` with a shared `ticketing.dlq`, names outside what the broker lets the login `ticketing_fulfillment` configure (`cine.ticketing_fulfillment.*`), so the declaration was refused. `TicketingQueuesTest` checks every declared queue against that pattern and the dead-letter wiring (HU-TICKETING-002).
 - The JPA repositories could not be created (`findByUserContactId` and `findPendingForRetry` were not valid queries), so no ticket could be stored. The unused `findByUserContactId` methods are removed and `findPendingForRetry` is a real query.
 - `ConcessionOrderConfirmedConsumerTest` never ran (no schema, bean clash with the projection test); its scenarios, the concession arriving before or after the booking, are now in `BookingConfirmedConsumerTest`.

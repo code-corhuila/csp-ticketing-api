@@ -47,7 +47,8 @@ public class TicketingConfiguration {
 
     @Bean
     @ConditionalOnMissingBean
-    public JavaMailSender javaMailSender(
+    // Declared as the implementation: the mail health indicator of Spring Boot is registered only for a JavaMailSenderImpl bean.
+    public JavaMailSenderImpl javaMailSender(
             @Value("${spring.mail.host}") String host,
             @Value("${spring.mail.port}") int port,
             @Value("${spring.mail.username}") String username,
@@ -98,6 +99,8 @@ public class TicketingConfiguration {
             @Value("${ticketing.rabbitmq.routing-key.user-registered}") String userRegisteredRoutingKey,
             @Value("${ticketing.rabbitmq.routing-key.user-email-changed}") String userEmailChangedRoutingKey
     ) {
+        // The exchanges belong to csp-infra-rabbitmq (ADR-036): the login of this service may configure only its own
+        // queues, so they are used by name in the bindings and never declared.
         TopicExchange mainExchange = new TopicExchange(exchange, true, false);
         TopicExchange dlxExchange = new TopicExchange("cine.dlx", true, false);
 
@@ -132,7 +135,6 @@ public class TicketingConfiguration {
         return new Declarables(
                 userRegistered, userEmailChanged, bookingConfirmed, concessionOrderConfirmed, ticketIssued,
                 userRegisteredDlq, userEmailChangedDlq, bookingConfirmedDlq, concessionOrderConfirmedDlq, ticketIssuedDlq,
-                mainExchange, dlxExchange,
                 b1, b2, b3, b4, b5, d1, d2, d3, d4, d5
         );
     }

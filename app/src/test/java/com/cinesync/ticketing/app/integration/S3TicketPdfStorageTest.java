@@ -53,7 +53,7 @@ class S3TicketPdfStorageTest {
     }
 
     private static S3TicketPdfStorage storage() {
-        return new S3TicketPdfStorage(url, "test-root", "test-root-secret", BUCKET);
+        return new S3TicketPdfStorage(url, "test-root", "test-root-secret", BUCKET, "us-east-1");
     }
 
     @Test
@@ -70,13 +70,13 @@ class S3TicketPdfStorageTest {
     @Test
     void theBucketIsCheckedWithTheAccountOfTheApi() {
         assertThatCode(() -> storage().check()).doesNotThrowAnyException();
-        assertThatThrownBy(() -> new S3TicketPdfStorage(url, "test-root", "test-root-secret", "other").check())
+        assertThatThrownBy(() -> new S3TicketPdfStorage(url, "test-root", "test-root-secret", "other", "us-east-1").check())
                 .isInstanceOf(PdfStorageException.class);
     }
 
     @Test
     void aStorageThatDoesNotAnswerIsAStorageFailureThatDoesNotLeakTheCredentials() {
-        S3TicketPdfStorage down = new S3TicketPdfStorage("http://127.0.0.1:1", "test-root", "test-root-secret", BUCKET);
+        S3TicketPdfStorage down = new S3TicketPdfStorage("http://127.0.0.1:1", "test-root", "test-root-secret", BUCKET, "us-east-1");
 
         assertThatThrownBy(() -> down.read(KEY)).isInstanceOf(PdfStorageException.class)
                 .hasMessageNotContaining("test-root-secret");

@@ -4,7 +4,6 @@ import com.cinesync.ticketing.core.model.PdfStorageException;
 import com.cinesync.ticketing.core.port.out.TicketPdfStorage;
 import io.minio.GetObjectArgs;
 import io.minio.MinioClient;
-import io.minio.StatObjectArgs;
 import io.minio.errors.ErrorResponseException;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
@@ -32,11 +31,13 @@ public class S3TicketPdfStorage implements TicketPdfStorage {
             @Value("${ticketing.object-storage.url}") String url,
             @Value("${ticketing.object-storage.access-key}") String accessKey,
             @Value("${ticketing.object-storage.secret-key}") String secretKey,
-            @Value("${ticketing.object-storage.bucket:tickets}") String bucket) {
+            @Value("${ticketing.object-storage.bucket:tickets}") String bucket,
+            @Value("${ticketing.object-storage.region:us-east-1}") String region) {
         if (accessKey.isBlank() || secretKey.isBlank()) {
             throw new IllegalStateException("OBJECT_STORAGE_ACCESS_KEY and OBJECT_STORAGE_SECRET_KEY are required");
         }
-        this.client = MinioClient.builder().endpoint(url).credentials(accessKey, secretKey).build();
+        // The region is given so that the client never asks for the location of the bucket, which the read-only account may not do.
+        this.client = MinioClient.builder().endpoint(url).credentials(accessKey, secretKey).region(region).build();
         this.bucket = bucket;
     }
 
@@ -62,8 +63,9 @@ public class S3TicketPdfStorage implements TicketPdfStorage {
 
     @Override
     public void check() {
-        try {
-            client.statObject(StatObjectArgs.builder().bucket(bucket).object(PROBE_KEY).build());
+        // A GET and not a HEAD: only the error body tells a missing bucket from a missing key.
+        try (InputStream ignored = client.getObject(GetObjectArgs.builder().bucket(bucket).object(PROBE_KEY).build())) {
+            return;
         } catch (ErrorResponseException e) {
             // A missing probe key is the good answer: the bucket exists and the account may read it.
             if (!"NoSuchKey".equals(e.errorResponse().code())) {
