@@ -101,8 +101,6 @@ public class TicketingConfiguration {
         TopicExchange mainExchange = new TopicExchange(exchange, true, false);
         TopicExchange dlxExchange = new TopicExchange("cine.dlx", true, false);
 
-        Queue dlq = new Queue("ticketing.dlq", true);
-
         // Auth events: one dead-letter queue per queue (ADR-007), reached through cine.dlx.
         Queue userRegistered = durableWithDeadLetter(userRegisteredQueue);
         Queue userRegisteredDlq = new Queue(userRegisteredQueue + DLQ_SUFFIX, true);
@@ -115,12 +113,10 @@ public class TicketingConfiguration {
         Queue concessionOrderConfirmed = durableWithDeadLetter(concessionOrderConfirmedQueue);
         Queue concessionOrderConfirmedDlq = new Queue(concessionOrderConfirmedQueue + DLQ_SUFFIX, true);
 
-        Queue ticketIssued = QueueBuilder.durable(ticketIssuedQueue)
-                .withArgument("x-dead-letter-exchange", "cine.dlx")
-                .withArgument("x-dead-letter-routing-key", "ticketing.dlq")
-                .build();
+        // The event of this service has a queue so that the relay can route it (an unroutable event is a permanent failure).
+        Queue ticketIssued = durableWithDeadLetter(ticketIssuedQueue);
+        Queue ticketIssuedDlq = new Queue(ticketIssuedQueue + DLQ_SUFFIX, true);
 
-        Binding sharedDlq = BindingBuilder.bind(dlq).to(dlxExchange).with("ticketing.dlq");
         Binding b1 = BindingBuilder.bind(userRegistered).to(mainExchange).with(userRegisteredRoutingKey);
         Binding b2 = BindingBuilder.bind(userEmailChanged).to(mainExchange).with(userEmailChangedRoutingKey);
         Binding d1 = BindingBuilder.bind(userRegisteredDlq).to(dlxExchange).with(userRegisteredQueue + DLQ_SUFFIX);
@@ -131,12 +127,13 @@ public class TicketingConfiguration {
         Binding d3 = BindingBuilder.bind(bookingConfirmedDlq).to(dlxExchange).with(bookingConfirmedQueue + DLQ_SUFFIX);
         Binding d4 = BindingBuilder.bind(concessionOrderConfirmedDlq).to(dlxExchange)
                 .with(concessionOrderConfirmedQueue + DLQ_SUFFIX);
+        Binding d5 = BindingBuilder.bind(ticketIssuedDlq).to(dlxExchange).with(ticketIssuedQueue + DLQ_SUFFIX);
 
         return new Declarables(
                 userRegistered, userEmailChanged, bookingConfirmed, concessionOrderConfirmed, ticketIssued,
-                userRegisteredDlq, userEmailChangedDlq, bookingConfirmedDlq, concessionOrderConfirmedDlq,
-                dlq, mainExchange, dlxExchange,
-                b1, b2, b3, b4, b5, d1, d2, d3, d4, sharedDlq
+                userRegisteredDlq, userEmailChangedDlq, bookingConfirmedDlq, concessionOrderConfirmedDlq, ticketIssuedDlq,
+                mainExchange, dlxExchange,
+                b1, b2, b3, b4, b5, d1, d2, d3, d4, d5
         );
     }
 
