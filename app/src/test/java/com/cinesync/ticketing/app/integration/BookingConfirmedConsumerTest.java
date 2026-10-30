@@ -55,25 +55,24 @@ class BookingConfirmedConsumerTest extends ProjectionTestSupport {
     private static String concessionOrderConfirmed(UUID reservationId) {
         return """
                 {"eventId":"%s","eventType":"ConcessionOrderConfirmed","occurredAt":"2026-10-30T15:00:00Z",
-                 "version":1,"source":"concessions-service","aggregateId":"%s",
+                 "version":1,"source":"concessions-service","aggregateId":"%s","aggregateType":"ConcessionOrder",
                  "payload":{"reservationId":"%s","items":[{"itemName":"Popcorn","quantity":2,"unitPrice":500}]},
                  "metadata":{"correlationId":"%s"}}
                 """.formatted(UUID.randomUUID(), reservationId, reservationId, UUID.randomUUID());
     }
 
-    /** The payload csp-concessions-api publishes (OrderService.event): every field of the order and of each line. */
+    /** The payload csp-concessions-api publishes for ConcessionOrderConfirmed (OrderService.event): the order and each line; {@code heldProducts} is only in ConcessionStockReserved. */
     private static String fullConcessionOrderConfirmed(UUID eventId, UUID reservationId, int unitPrice) {
         UUID orderId = UUID.randomUUID();
         return """
                 {"eventId":"%s","eventType":"ConcessionOrderConfirmed","occurredAt":"2026-10-30T15:00:00Z",
-                 "version":1,"source":"concessions-service","aggregateId":"%s",
+                 "version":1,"source":"concessions-service","aggregateId":"%s","aggregateType":"ConcessionOrder",
                  "payload":{"orderId":"%s","userId":"%s","reservationId":"%s","status":"CONFIRMED","totalAmount":%d,
                             "items":[{"itemType":"PRODUCT","itemId":"%s","itemName":"Popcorn","unitPrice":%d,"quantity":2},
-                                     {"itemType":"COMBO","itemId":"%s","itemName":"Family combo","unitPrice":1500,"quantity":1}],
-                            "heldProducts":[{"productId":"%s","quantity":2}]},
+                                     {"itemType":"COMBO","itemId":"%s","itemName":"Family combo","unitPrice":1500,"quantity":1}]},
                  "metadata":{"correlationId":"%s"}}
                 """.formatted(eventId, orderId, orderId, UUID.randomUUID(), reservationId, unitPrice * 2 + 1500,
-                UUID.randomUUID(), unitPrice, UUID.randomUUID(), UUID.randomUUID(), UUID.randomUUID());
+                UUID.randomUUID(), unitPrice, UUID.randomUUID(), UUID.randomUUID());
     }
 
     private Ticket awaitTicket(UUID reservationId) {
