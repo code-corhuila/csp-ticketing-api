@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Fixed
+- A concession order that arrives before the booking was never stored: the pending order inserted its items as text into a `jsonb` column and the transaction failed, so the message was retried and dead-lettered unless the ticket appeared in the meantime. `PendingConcessionOrder.itemsJson` is now mapped as JSON, like the JSON columns of `Ticket` (HU-TICKETING-002, `csp-ticketing-api#5`). The test that exercised this path only passed through those retries; it now waits for the inbox row of the concession event.
+- The booking and the concession order of a reservation are consumed by two listeners at the same time and each looks for what the other stores, so both could miss it and leave the ticket without its concessions, with the pending order orphaned. Both handlers now take a transaction lock per reservation (`pg_advisory_xact_lock`), and `ConcessionBookingRaceTest` runs 80 pairs at once.
+
 ### Changed
 - The integration tests build their schema by applying the migrations of `csp-ticketing-db` with Flyway (the `sql` folder of the sibling checkout, or `-Dticketing.db.dir`) instead of keeping a copy of it, so they cannot drift from the deployed schema. `ProjectionApp` moved out of the package that `TicketingApplication` scans, and `TicketingApplicationTests` no longer allows bean definition overriding (HU-TICKETING-002 follow-up).
 - Tests for `ConcessionOrderConfirmed`: the full payload of `csp-concessions-api` (name, quantity and unit price of every line, product and combo) and a redelivery with the same `eventId` that must not change what was stored.
