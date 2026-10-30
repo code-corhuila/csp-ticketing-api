@@ -9,8 +9,8 @@ import com.cinesync.ticketing.adapter.out.rabbitmq.RabbitEventPublisher;
 import org.springframework.amqp.core.Binding;
 import org.springframework.amqp.core.BindingBuilder;
 import org.springframework.amqp.core.Declarables;
-import org.springframework.amqp.core.Exchange;
 import org.springframework.amqp.core.Queue;
+import org.springframework.amqp.core.QueueBuilder;
 import org.springframework.amqp.core.TopicExchange;
 import org.springframework.amqp.rabbit.config.SimpleRabbitListenerContainerFactory;
 import org.springframework.amqp.rabbit.connection.ConnectionFactory;
@@ -83,7 +83,59 @@ public class TicketingConfiguration {
         return template;
     }
 
-    // RabbitMQ Listener Container Factory with consumer recovery
+    @Bean
+    public Declarables ticketingQueues(
+            @Value("${ticketing.rabbitmq.exchange}") String exchange,
+            @Value("${ticketing.rabbitmq.queue.user-registered}") String userRegisteredQueue,
+            @Value("${ticketing.rabbitmq.queue.user-email-changed}") String userEmailChangedQueue,
+            @Value("${ticketing.rabbitmq.queue.booking-confirmed}") String bookingConfirmedQueue,
+            @Value("${ticketing.rabbitmq.queue.concession-order-confirmed}") String concessionOrderConfirmedQueue,
+            @Value("${ticketing.rabbitmq.queue.ticket-issued}") String ticketIssuedQueue,
+            @Value("${ticketing.rabbitmq.routing-key.booking-confirmed}") String bookingConfirmedRoutingKey
+    ) {
+        TopicExchange mainExchange = new TopicExchange(exchange, true, false);
+        TopicExchange dlxExchange = new TopicExchange("cine.dlx", true, false);
+
+        Queue dlq = new Queue("ticketing.dlq", true);
+
+        Queue userRegistered = QueueBuilder.durable(userRegisteredQueue)
+                .withArgument("x-dead-letter-exchange", "cine.dlx")
+                .withArgument("x-dead-letter-routing-key", "ticketing.dlq")
+                .build();
+
+        Queue userEmailChanged = QueueBuilder.durable(userEmailChangedQueue)
+                .withArgument("x-dead-letter-exchange", "cine.dlx")
+                .withArgument("x-dead-letter-routing-key", "ticketing.dlq")
+                .build();
+
+        Queue bookingConfirmed = QueueBuilder.durable(bookingConfirmedQueue)
+                .withArgument("x-dead-letter-exchange", "cine.dlx")
+                .withArgument("x-dead-letter-routing-key", "ticketing.dlq")
+                .build();
+
+        Queue concessionOrderConfirmed = QueueBuilder.durable(concessionOrderConfirmedQueue)
+                .withArgument("x-dead-letter-exchange", "cine.dlx")
+                .withArgument("x-dead-letter-routing-key", "ticketing.dlq")
+                .build();
+
+        Queue ticketIssued = QueueBuilder.durable(ticketIssuedQueue)
+                .withArgument("x-dead-letter-exchange", "cine.dlx")
+                .withArgument("x-dead-letter-routing-key", "ticketing.dlq")
+                .build();
+
+        Binding b1 = BindingBuilder.bind(userRegistered).to(mainExchange).with("user.registered");
+        Binding b2 = BindingBuilder.bind(userEmailChanged).to(mainExchange).with("user.email.changed");
+        Binding b3 = BindingBuilder.bind(concessionOrderConfirmed).to(mainExchange).with("concession.order.confirmed");
+        Binding b4 = BindingBuilder.bind(ticketIssued).to(mainExchange).with("cine.ticketing_fulfillment.ticket-issued.v1");
+        Binding b5 = BindingBuilder.bind(bookingConfirmed).to(mainExchange).with(bookingConfirmedRoutingKey);
+
+        return new Declarables(
+                userRegistered, userEmailChanged, concessionOrderConfirmed, ticketIssued,
+                new Queue("ticketing.dlq", true),
+                mainExchange, dlxExchange
+        );
+    }
+
     @Bean
     public SimpleRabbitListenerContainerFactory rabbitListenerContainerFactory(
             SimpleRabbitListenerContainerFactoryConfigurer configurer,
@@ -97,10 +149,8 @@ public class TicketingConfiguration {
         SimpleRabbitListenerContainerFactory factory = new SimpleRabbitListenerContainerFactory();
         configurer.configure(factory, connectionFactory);
 
-        // Consumer recovery: exponential backoff, no attempt limit (maxAttempts=0 = unlimited)
-        factory.setRecoveryInterval(1000L); // Base recovery check interval
+        factory.setRecoveryInterval(1000L);
 
-        // Retry template for consumer recovery (re-subscribe after cancel)
         RetryTemplate retryTemplate = new RetryTemplate();
         ExponentialBackOffPolicy backOffPolicy = new ExponentialBackOffPolicy();
         backOffPolicy.setInitialInterval(initialIntervalMs);
@@ -109,12 +159,11 @@ public class TicketingConfiguration {
         retryTemplate.setBackOffPolicy(backOffPolicy);
 
         SimpleRetryPolicy retryPolicy = new SimpleRetryPolicy();
-        retryPolicy.setMaxAttempts(Math.toIntExact(maxAttempts)); // 0 = unlimited
+        retryPolicy.setMaxAttempts(Math.toIntExact(maxAttempts));
         retryTemplate.setRetryPolicy(retryPolicy);
 
         factory.setRetryTemplate(retryTemplate);
 
-        // Missing queues should not be fatal (allow re-declaration)
         factory.setMissingQueuesFatal(false);
         factory.setAutoStartup(true);
         factory.setDefaultRequeueRejected(false);
@@ -122,7 +171,6 @@ public class TicketingConfiguration {
         return factory;
     }
 
-    // RabbitAdmin for queue declaration at startup
     @Bean
     public RabbitAdmin rabbitAdmin(ConnectionFactory connectionFactory) {
         RabbitAdmin admin = new RabbitAdmin(connectionFactory);
@@ -130,42 +178,6 @@ public class TicketingConfiguration {
         return admin;
     }
 
-    // Queue declaration at startup (before relay enabled)
-    @Bean
-    public Declarables ticketingQueues(
-            @Value("${ticketing.rabbitmq.exchange}") String exchange,
-            @Value("${ticketing.rabbitmq.queue.user-registered}") String userRegisteredQueue,
-            @Value("${ticketing.rabbitmq.queue.user-email-changed}") String userEmailChangedQueue,
-            @Value("${ticketing.rabbitmq.queue.booking-confirmed}") String bookingConfirmedQueue,
-            @Value("${ticketing.rabbitmq.queue.concession-order-confirmed}") String concessionOrderConfirmedQueue,
-            @Value("${ticketing.rabbitmq.queue.ticket-issued}") String ticketIssuedQueue,
-            @Value("${ticketing.rabbitmq.queue.dlq}") String dlqQueue,
-            @Value("${ticketing.rabbitmq.routing-key.ticket-issued}") String ticketIssuedRoutingKey
-    ) {
-        Queue userRegistered = new Queue(userRegisteredQueue, true);
-        Queue userEmailChanged = new Queue(userEmailChangedQueue, true);
-        Queue bookingConfirmed = new Queue(bookingConfirmedQueue, true);
-        Queue concessionOrderConfirmed = new Queue(concessionOrderConfirmedQueue, true);
-        Queue ticketIssued = new Queue(ticketIssuedQueue, true);
-        Queue dlq = new Queue(dlqQueue, true);
-
-        Exchange topicExchange = new TopicExchange(exchange, true, false);
-
-        Binding bindingUserRegistered = BindingBuilder.bind(userRegistered).to(topicExchange).with("user.registered").noargs();
-        Binding bindingUserEmailChanged = BindingBuilder.bind(userEmailChanged).to(topicExchange).with("user.email.changed").noargs();
-        Binding bindingBookingConfirmed = BindingBuilder.bind(bookingConfirmed).to(topicExchange).with("booking.confirmed").noargs();
-        Binding bindingConcessionOrderConfirmed = BindingBuilder.bind(concessionOrderConfirmed).to(topicExchange).with("concession.order.confirmed").noargs();
-        Binding bindingTicketIssued = BindingBuilder.bind(ticketIssued).to(topicExchange).with(ticketIssuedRoutingKey).noargs();
-
-        return new Declarables(
-                userRegistered, userEmailChanged, bookingConfirmed, concessionOrderConfirmed, ticketIssued, dlq,
-                topicExchange,
-                bindingUserRegistered, bindingUserEmailChanged, bindingBookingConfirmed,
-                bindingConcessionOrderConfirmed, bindingTicketIssued
-        );
-    }
-
-    // DLQ message recoverer (after 3 retries)
     @Bean
     public MessageRecoverer deadLetterRecoverer(RabbitTemplate rabbitTemplate,
             @Value("${ticketing.rabbitmq.queue.dlq}") String dlqQueue) {
@@ -176,5 +188,52 @@ public class TicketingConfiguration {
     @ConditionalOnMissingBean
     public ObjectMapper objectMapper() {
         return new com.fasterxml.jackson.databind.ObjectMapper();
+    }
+
+    @Bean
+    @ConditionalOnMissingBean
+    public EmailSenderPort emailSenderPort(JavaMailSender mailSender) {
+        return new SmtpEmailSender(mailSender);
+    }
+
+    @Bean
+    @ConditionalOnMissingBean
+    public JavaMailSender javaMailSender(
+            @Value("${spring.mail.host}") String host,
+            @Value("${spring.mail.port}") int port,
+            @Value("${spring.mail.username}") String username,
+            @Value("${spring.mail.password}") String password,
+            @Value("${spring.mail.properties.mail.smtp.auth:true}") boolean auth,
+            @Value("${spring.mail.properties.mail.smtp.starttls.enable:true}") boolean starttls
+    ) {
+        JavaMailSenderImpl sender = new JavaMailSenderImpl();
+        sender.setHost(host);
+        sender.setPort(port);
+        sender.setUsername(username);
+        sender.setPassword(password);
+        Properties props = sender.getJavaMailProperties();
+        props.put("mail.smtp.auth", auth);
+        props.put("mail.smtp.starttls.enable", starttls);
+        return sender;
+    }
+
+    @Bean
+    @ConditionalOnMissingBean
+    public PdfGeneratorPort pdfGeneratorPort() {
+        return new ITextPdfGenerator();
+    }
+
+    @Bean
+    @ConditionalOnMissingBean
+    public EventPublisherPort eventPublisherPort(RabbitTemplate rabbitTemplate, ObjectMapper objectMapper) {
+        return new RabbitEventPublisher(rabbitTemplate, objectMapper);
+    }
+
+    @Bean
+    public RabbitTemplate rabbitTemplate(ConnectionFactory connectionFactory) {
+        RabbitTemplate template = new RabbitTemplate(connectionFactory);
+        template.setMessageConverter(new Jackson2JsonMessageConverter());
+        template.setMandatory(true);
+        return template;
     }
 }

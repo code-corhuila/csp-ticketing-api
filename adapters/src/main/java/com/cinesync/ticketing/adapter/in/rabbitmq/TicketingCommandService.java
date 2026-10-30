@@ -4,10 +4,8 @@ import com.cinesync.ticketing.core.model.Ticket;
 import com.cinesync.ticketing.core.model.TicketingFulfillment;
 import com.cinesync.ticketing.core.model.UserContact;
 import com.cinesync.ticketing.core.port.in.TicketingCommandUseCase;
-import com.cinesync.ticketing.core.port.out.EmailSenderPort;
 import com.cinesync.ticketing.core.port.out.EventPublisherPort;
 import com.cinesync.ticketing.core.port.out.InboxEventRepository;
-import com.cinesync.ticketing.core.port.out.PdfGeneratorPort;
 import com.cinesync.ticketing.core.port.out.TicketRepository;
 import com.cinesync.ticketing.core.port.out.TicketingFulfillmentRepository;
 import com.cinesync.ticketing.core.port.out.UserContactRepository;
@@ -30,8 +28,6 @@ public class TicketingCommandService implements TicketingCommandUseCase {
     private final TicketRepository ticketRepository;
     private final TicketingFulfillmentRepository fulfillmentRepository;
     private final InboxEventRepository inboxEventRepository;
-    private final EmailSenderPort emailSenderPort;
-    private final PdfGeneratorPort pdfGeneratorPort;
     private final EventPublisherPort eventPublisherPort;
     private final ObjectMapper objectMapper;
 
@@ -67,8 +63,8 @@ public class TicketingCommandService implements TicketingCommandUseCase {
     @Transactional
     public void handleBookingConfirmed(UUID reservationId, UUID userId, UUID showtimeId,
                                        String movieTitle, String roomName, String showtimeStartsAt,
-                                       String seatNumbersJson) {
-        log.info("Processing BookingConfirmed: reservationId={}", reservationId);
+                                       String seatNumbersJson, String correlationId) {
+        log.info("Processing BookingConfirmed: reservationId={}, correlationId={}", reservationId, correlationId);
 
         UserContact contact = userContactRepository.findByUserId(userId)
                 .orElseThrow(() -> new IllegalStateException("User contact not found for userId: " + userId));
@@ -102,11 +98,6 @@ public class TicketingCommandService implements TicketingCommandUseCase {
 
         ticket = ticketRepository.save(ticket);
 
-        byte[] pdfBytes = pdfGeneratorPort.generateTicketPdf(ticket);
-        String pdfUrl = "s3://tickets/" + ticket.getId() + ".pdf";
-        ticket.setPdfUrl(pdfUrl);
-        ticketRepository.save(ticket);
-
         TicketingFulfillment fulfillment = TicketingFulfillment.builder()
                 .ticketId(ticket.getId())
                 .channel("EMAIL")
@@ -115,24 +106,9 @@ public class TicketingCommandService implements TicketingCommandUseCase {
                 .build();
         fulfillmentRepository.save(fulfillment);
 
-        try {
-            emailSenderPort.sendTicketEmail(
-                    contact.getEmail(),
-                    "Your CineSync Ticket for " + movieTitle,
-                    buildEmailHtml(ticket),
-                    pdfBytes,
-                    "ticket-" + ticket.getId() + ".pdf"
-            );
-            fulfillment.setStatus(TicketingFulfillment.FulfillmentStatus.SENT);
-        } catch (Exception e) {
-            log.error("Email send failed for ticket {}: {}", ticket.getId(), e.getMessage());
-            fulfillment.setStatus(TicketingFulfillment.FulfillmentStatus.FAILED);
-            fulfillment.setLastError(e.getMessage());
-            fulfillment.setAttempts(1);
-        }
-        fulfillmentRepository.save(fulfillment);
-
-        eventPublisherPort.publishTicketIssued(ticket.getId(), reservationId, pdfUrl, ticket.getConcessionsSnapshot());
+        // Do NOT generate PDF, send email, or publish TicketIssued here.
+        // The worker will generate the PDF, upload it, and call the internal endpoint
+        // to provide the pdfUrl, at which point we'll publish TicketIssued.
     }
 
     @Override
@@ -147,7 +123,7 @@ public class TicketingCommandService implements TicketingCommandUseCase {
             if (updated > 0) {
                 log.info("Updated concessions snapshot for reservationId: {}", reservationId);
             } else {
-                log.warn("No ticket found for reservationId: {}, storing for later merge", reservationId);
+                log.warn("No ticket found for reservationId: {}, concessions will be merged when ticket is created", reservationId);
             }
         } catch (Exception e) {
             log.error("Failed to parse concessions items: {}", e.getMessage(), e);
@@ -160,26 +136,5 @@ public class TicketingCommandService implements TicketingCommandUseCase {
     public Ticket getOrCreateTicketForReservation(UUID reservationId) {
         return ticketRepository.findByReservationId(reservationId)
                 .orElseThrow(() -> new IllegalStateException("Ticket not found for reservation: " + reservationId));
-    }
-
-    private String buildEmailHtml(Ticket ticket) {
-        return String.format("""
-                <html>
-                <body>
-                    <h1>Your CineSync Ticket</h1>
-                    <p><strong>Movie:</strong> %s</p>
-                    <p><strong>Room:</strong> %s</p>
-                    <p><strong>Showtime:</strong> %s</p>
-                    <p><strong>Seats:</strong> %s</p>
-                    <p><strong>QR Code:</strong> %s</p>
-                </body>
-                </html>
-                """,
-                ticket.getMovieTitleSnapshot(),
-                ticket.getRoomNameSnapshot(),
-                ticket.getShowtimeStartsAt(),
-                String.join(", ", ticket.getSeatLabelsSnapshot()),
-                ticket.getQrPayload()
-        );
     }
 }
