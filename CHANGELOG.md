@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Changed
+- The integration tests build their schema by applying the migrations of `csp-ticketing-db` with Flyway (the `sql` folder of the sibling checkout, or `-Dticketing.db.dir`) instead of keeping a copy of it, so they cannot drift from the deployed schema. `ProjectionApp` moved out of the package that `TicketingApplication` scans, and `TicketingApplicationTests` no longer allows bean definition overriding (HU-TICKETING-002 follow-up).
+- Tests for `ConcessionOrderConfirmed`: the full payload of `csp-concessions-api` (name, quantity and unit price of every line, product and combo) and a redelivery with the same `eventId` that must not change what was stored.
+
 ### Added
 - Validation of the access token (csp-ticketing-api#12, norm 5.3.7 and 5.3.12, ADR-042, ADR-056): RS256 with the key of `JWT_PUBLIC_KEY` or `JWT_PUBLIC_KEY_FILE`, `exp` and `sub` required, 30 s of clock skew, any other algorithm rejected; the service does not start without the key. `/health` and `/health/ready` need no token; `/me/**` needs a user token (the `sub` is the user id) with `ticket:read:self`; `/internal/**` needs a service credential (issuer `csp-auth`, audience `csp-internal`, `sub` in `SERVICE_SUBJECTS`). Answers: `401 UNAUTHORIZED`, `403 FORBIDDEN` in the single error envelope. Before this the oauth2 resource server had no configuration and the service answered `401` to every request, the health routes and the worker included.
 - HU-TICKETING-002 (ADR-058): `GET /api/v1/ticketing/me/tickets/{ticketId}/pdf` streams the ticket PDF to its owner (`application/pdf`, attachment, `private, no-store`); a ticket of another user, an unknown ticket and a ticket without PDF answer `404`, and a storage that cannot give the file answers `503` without describing the storage. The API reads the private bucket through the S3 API with a read-only account (`OBJECT_STORAGE_URL`, `OBJECT_STORAGE_ACCESS_KEY`, `OBJECT_STORAGE_SECRET_KEY`, `OBJECT_STORAGE_BUCKET`; the secrets have no default and the API refuses to start without them). `/health/ready` reports `objectStorage`.
