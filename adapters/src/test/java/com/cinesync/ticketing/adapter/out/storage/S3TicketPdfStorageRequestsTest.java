@@ -64,6 +64,6 @@ class S3TicketPdfStorageRequestsTest {
     void theBucketCheckAsksOnlyForItsProbeKey() {
         storage().check();
 
-        assertThat(requests).containsExactly("HEAD /tickets/tickets/.readiness");
+        assertThat(requests).containsExactly("GET /tickets/tickets/.readiness");
     }
 }
