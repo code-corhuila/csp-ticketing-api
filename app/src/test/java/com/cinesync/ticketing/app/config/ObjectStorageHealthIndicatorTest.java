@@ -21,9 +21,9 @@ class ObjectStorageHealthIndicatorTest {
 
     @Test
     void anUnreachableBucketIsDownWithoutTheErrorOfTheStorage() {
-        doThrow(new PdfStorageException("connect to minio:9000 refused")).when(storage).check();
+        doThrow(new PdfStorageException("connect to rustfs:9000 refused")).when(storage).check();
 
         assertThat(indicator.health().getStatus()).isEqualTo(Status.DOWN);
-        assertThat(indicator.health().getDetails().toString()).doesNotContain("minio:9000");
+        assertThat(indicator.health().getDetails().toString()).doesNotContain("rustfs:9000");
     }
 }

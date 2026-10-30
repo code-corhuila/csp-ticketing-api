@@ -80,7 +80,7 @@ ticketing:
 
   # The bucket of the ticket PDFs (ADR-058). The API only reads it; csp-worker writes it. No default for the secrets.
   object-storage:
-    url: ${OBJECT_STORAGE_URL:http://minio:9000}
+    url: ${OBJECT_STORAGE_URL:http://rustfs:9000}
     access-key: ${OBJECT_STORAGE_ACCESS_KEY:}
     secret-key: ${OBJECT_STORAGE_SECRET_KEY:}
     bucket: ${OBJECT_STORAGE_BUCKET:tickets}
