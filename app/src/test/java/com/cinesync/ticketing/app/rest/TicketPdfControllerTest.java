@@ -75,7 +75,7 @@ class TicketPdfControllerTest {
 
     @Test
     void aFailingStorageIsServiceUnavailableWithoutDetailsOfTheStorage() throws Exception {
-        when(download.download(user, ticketId)).thenThrow(new PdfStorageException("connect to minio:9000 refused"));
+        when(download.download(user, ticketId)).thenThrow(new PdfStorageException("connect to rustfs:9000 refused"));
 
         mvc.perform(get("/api/v1/ticketing/me/tickets/{id}/pdf", ticketId))
                 .andExpect(status().isServiceUnavailable())
