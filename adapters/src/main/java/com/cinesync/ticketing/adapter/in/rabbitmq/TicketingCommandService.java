@@ -4,6 +4,7 @@ import com.cinesync.ticketing.core.model.PendingConcessionOrder;
 import com.cinesync.ticketing.core.model.Ticket;
 import com.cinesync.ticketing.core.model.TicketingFulfillment;
 import com.cinesync.ticketing.core.model.UserContact;
+import com.cinesync.ticketing.core.port.in.BookingConfirmation;
 import com.cinesync.ticketing.core.port.in.TicketingCommandUseCase;
 import com.cinesync.ticketing.core.port.out.EventPublisherPort;
 import com.cinesync.ticketing.core.port.out.InboxEventRepository;
@@ -64,38 +65,33 @@ public class TicketingCommandService implements TicketingCommandUseCase {
 
     @Override
     @Transactional
-    public void handleBookingConfirmed(UUID reservationId, UUID userId, UUID showtimeId,
-                                       String movieTitle, String roomName, String showtimeStartsAt,
-                                       String seatNumbersJson, String correlationId) {
+    public void handleBookingConfirmed(BookingConfirmation booking, String correlationId) {
+        UUID reservationId = booking.reservationId();
         log.info("Processing BookingConfirmed: reservationId={}, correlationId={}", reservationId, correlationId);
 
-        UserContact contact = userContactRepository.findByUserId(userId)
-                .orElseThrow(() -> new IllegalStateException("User contact not found for userId: " + userId));
-
-        Ticket existingTicket = ticketRepository.findByReservationId(reservationId).orElse(null);
-        if (existingTicket != null) {
+        if (ticketRepository.findByReservationId(reservationId).isPresent()) {
             log.info("Ticket already exists for reservationId: {}", reservationId);
             return;
         }
 
-        List<String> seatLabels;
-        try {
-            seatLabels = objectMapper.readValue(seatNumbersJson,
-                    objectMapper.getTypeFactory().constructCollectionType(List.class, String.class));
-        } catch (Exception e) {
-            throw new IllegalArgumentException("Invalid seatNumbers JSON", e);
+        // The contact may arrive after the booking: the ticket is stored anyway and the delivery stays
+        // PENDING until the contact can be resolved by user_id (ADR-057).
+        UUID contactId = userContactRepository.findByUserId(booking.userId()).map(UserContact::getId).orElse(null);
+        if (contactId == null) {
+            log.info("No contact yet for the user of reservationId: {}, delivery stays pending", reservationId);
         }
 
-        String qrPayload = "CSP-" + reservationId + "-" + String.join("-", seatLabels);
+        String qrPayload = "CSP-" + reservationId + "-" + String.join("-", booking.seatNumbers());
 
         Ticket ticket = Ticket.builder()
-                .userContactId(contact.getId())
+                .userId(booking.userId())
+                .userContactId(contactId)
                 .reservationId(reservationId)
-                .showtimeId(showtimeId)
-                .movieTitleSnapshot(movieTitle)
-                .roomNameSnapshot(roomName)
-                .showtimeStartsAt(Instant.parse(showtimeStartsAt))
-                .seatLabelsSnapshot(seatLabels)
+                .showtimeId(booking.showtimeId())
+                .movieTitleSnapshot(booking.movieTitle())
+                .roomNameSnapshot(booking.roomName())
+                .showtimeStartsAt(booking.showtimeStartsAt())
+                .seatLabelsSnapshot(booking.seatNumbers())
                 .qrPayload(qrPayload)
                 .build();
 
