@@ -41,6 +41,7 @@ spring:
     port: ${RABBITMQ_PORT:5672}
     username: ${RABBITMQ_USER:guest}
     password: ${RABBITMQ_PASS:guest}
+    virtual-host: ${RABBITMQ_VHOST:/}  # Use %2F in AMQP URL for default vhost
     listener:
       simple:
         acknowledge-mode: manual
@@ -50,6 +51,14 @@ spring:
           max-interval: 60000
           multiplier: 2
           max-attempts: 3
+        missing-queues-fatal: false
+        auto-startup: true
+        default-requeue-rejected: false
+
+  # RabbitMQ connection factory config for recovery
+  rabbitmq:
+    connection-timeout: 10000
+    requested-heartbeat: 60
 
 ticketing:
   rabbitmq:
@@ -63,6 +72,17 @@ ticketing:
       concession-order-confirmed: ticketing.concession-order-confirmed
       ticket-issued: ticketing.ticket-issued
       dlq: ticketing.dlq
+    # Queue declaration at startup (before relay enabled)
+    declare-at-startup: true
+    # Consumer recovery config
+    consumer:
+      recovery:
+        initial-interval-ms: 1000
+        max-interval-ms: 30000
+        multiplier: 2.0
+        max-attempts: 0  # 0 = unlimited
+      cancel:
+        log-warn: true
 
   jwt:
     public-key: ${JWT_PUBLIC_KEY:}
