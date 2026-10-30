@@ -2,7 +2,11 @@ package com.cinesync.ticketing.adapter.out.repository;
 
 import com.cinesync.ticketing.core.model.TicketingFulfillment;
 import com.cinesync.ticketing.core.port.out.TicketingFulfillmentRepository;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
 import java.time.Instant;
@@ -11,9 +15,13 @@ import java.util.UUID;
 
 @Repository
 public interface TicketingFulfillmentJpaRepository extends JpaRepository<TicketingFulfillment, UUID>, TicketingFulfillmentRepository {
-    @Override
-    List<TicketingFulfillment> findPendingForRetry(Instant now, int limit);
+    @Query("SELECT f FROM TicketingFulfillment f WHERE f.status = :status "
+            + "AND (f.nextRetryAt IS NULL OR f.nextRetryAt <= :now) ORDER BY f.createdAt")
+    List<TicketingFulfillment> findDue(@Param("status") TicketingFulfillment.FulfillmentStatus status,
+                                       @Param("now") Instant now, Pageable pageable);
 
     @Override
-    List<TicketingFulfillment> findByUserContactId(UUID userContactId, int page, int limit);
+    default List<TicketingFulfillment> findPendingForRetry(Instant now, int limit) {
+        return findDue(TicketingFulfillment.FulfillmentStatus.PENDING, now, PageRequest.of(0, limit));
+    }
 }

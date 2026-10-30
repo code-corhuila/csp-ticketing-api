@@ -11,5 +11,4 @@ public interface TicketingFulfillmentRepository {
     TicketingFulfillment save(TicketingFulfillment fulfillment);
     Optional<TicketingFulfillment> findByTicketId(UUID ticketId);
     List<TicketingFulfillment> findPendingForRetry(Instant now, int limit);
-    List<TicketingFulfillment> findByUserContactId(UUID userContactId, int page, int limit);
 }

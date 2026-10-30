@@ -55,26 +55,12 @@ public class UserEventConsumer {
     @RabbitListener(queues = "${ticketing.rabbitmq.queue.booking-confirmed}")
     @Transactional
     public void onBookingConfirmed(String message) {
-        processEvent(message, "BookingConfirmed", (payload, root) -> {
-            UUID reservationId = UUID.fromString(payload.get("reservationId").asText());
-            UUID userId = UUID.fromString(payload.get("userId").asText());
-            UUID showtimeId = UUID.fromString(payload.get("showtimeId").asText());
-            String movieTitle = payload.get("movieTitle").asText();
-            String roomName = payload.get("roomName").asText();
-            String showtimeStartsAt = payload.get("showtimeStartsAt").asText();
-            String seatNumbers;
-            try {
-                seatNumbers = objectMapper.writeValueAsString(payload.get("seatNumbers"));
-            } catch (com.fasterxml.jackson.core.JsonProcessingException e) {
-                throw new RuntimeException("Invalid seatNumbers JSON", e);
-            }
-            String correlationId = root.path("metadata").path("correlationId").asText(null);
-
-            commandUseCase.handleBookingConfirmed(
-                    reservationId, userId, showtimeId, movieTitle, roomName,
-                    showtimeStartsAt, seatNumbers, correlationId
-            );
-        });
+        BookingConfirmedEvent event = BookingConfirmedEvent.parse(message, objectMapper);
+        if (!inboxEventRepository.tryInsert(event.eventId(), "BookingConfirmed")) {
+            log.info("Duplicate eventId {} for BookingConfirmed, skipping", event.eventId());
+            return;
+        }
+        commandUseCase.handleBookingConfirmed(event.booking(), event.correlationId());
     }
 
     @RabbitListener(queues = "${ticketing.rabbitmq.queue.concession-order-confirmed}")
