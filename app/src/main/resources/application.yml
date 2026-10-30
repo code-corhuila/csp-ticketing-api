@@ -77,9 +77,6 @@ ticketing:
       dlq: ticketing.dlq
     # Queue declaration at startup (before relay enabled)
     declare-at-startup: true
-    consumer:
-      cancel:
-        log-warn: true
 
   jwt:
     public-key: ${JWT_PUBLIC_KEY:}

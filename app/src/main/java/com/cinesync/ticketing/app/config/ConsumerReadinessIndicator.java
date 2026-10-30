@@ -1,57 +1,57 @@
 package com.cinesync.ticketing.app.config;
 
+import org.springframework.amqp.rabbit.listener.AbstractMessageListenerContainer;
+import org.springframework.amqp.rabbit.listener.MessageListenerContainer;
+import org.springframework.amqp.rabbit.listener.RabbitListenerEndpointRegistry;
 import org.springframework.amqp.rabbit.listener.SimpleMessageListenerContainer;
 import org.springframework.boot.actuate.health.Health;
 import org.springframework.boot.actuate.health.HealthIndicator;
-import org.springframework.context.ApplicationContext;
 import org.springframework.stereotype.Component;
 
+import java.util.Arrays;
+import java.util.Collection;
+import java.util.LinkedHashMap;
 import java.util.Map;
-import java.util.stream.Collectors;
 
-@Component
+/**
+ * Reports DOWN while any listener container has no consumer subscribed to its queues, for example after
+ * the broker cancelled the consumer or deleted its queue and the container has not resubscribed yet.
+ */
+@Component("consumers")
 public class ConsumerReadinessIndicator implements HealthIndicator {
 
-    private final ApplicationContext applicationContext;
+    private final RabbitListenerEndpointRegistry registry;
 
-    public ConsumerReadinessIndicator(ApplicationContext applicationContext) {
-        this.applicationContext = applicationContext;
+    public ConsumerReadinessIndicator(RabbitListenerEndpointRegistry registry) {
+        this.registry = registry;
     }
 
     @Override
     public Health health() {
-        Map<String, SimpleMessageListenerContainer> containers = applicationContext.getBeansOfType(SimpleMessageListenerContainer.class);
-
+        Collection<MessageListenerContainer> containers = registry.getListenerContainers();
         if (containers.isEmpty()) {
-            return Health.down()
-                    .withDetail("consumers", "no listener containers found")
-                    .build();
+            return Health.down().withDetail("consumers", "no listener containers found").build();
         }
 
-        Map<String, Object> details = containers.entrySet().stream()
-                .collect(Collectors.toMap(
-                        Map.Entry::getKey,
-                        entry -> {
-                            SimpleMessageListenerContainer container = entry.getValue();
-                            return Map.of(
-                                    "running", container.isRunning(),
-                                    "active", container.isActive(),
-                                    "queueNames", container.getQueueNames()
-                            );
-                        }
-                ));
-
-        boolean allRunning = containers.values().stream()
-                .allMatch(SimpleMessageListenerContainer::isRunning);
-
-        if (allRunning) {
-            return Health.up()
-                    .withDetails(details)
-                    .build();
-        } else {
-            return Health.down()
-                    .withDetails(details)
-                    .build();
+        Map<String, Object> details = new LinkedHashMap<>();
+        boolean allSubscribed = true;
+        for (MessageListenerContainer container : containers) {
+            boolean subscribed = isSubscribed(container);
+            allSubscribed &= subscribed;
+            details.put(queueNames(container), subscribed ? "subscribed" : "not subscribed");
         }
+        return (allSubscribed ? Health.up() : Health.down()).withDetails(details).build();
+    }
+
+    private static boolean isSubscribed(MessageListenerContainer container) {
+        return container.isRunning()
+                && container instanceof SimpleMessageListenerContainer simple
+                && simple.getActiveConsumerCount() > 0;
+    }
+
+    private static String queueNames(MessageListenerContainer container) {
+        return container instanceof AbstractMessageListenerContainer abstractContainer
+                ? String.join(",", Arrays.asList(abstractContainer.getQueueNames()))
+                : container.toString();
     }
 }
