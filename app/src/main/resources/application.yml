@@ -71,8 +71,8 @@ ticketing:
     queue:
       user-registered: cine.ticketing_fulfillment.user-registered
       user-email-changed: cine.ticketing_fulfillment.user-email-changed
-      booking-confirmed: ticketing.booking-confirmed.v1
-      concession-order-confirmed: ticketing.concession-order-confirmed
+      booking-confirmed: cine.ticketing_fulfillment.booking-confirmed
+      concession-order-confirmed: cine.ticketing_fulfillment.concession-order-confirmed
       ticket-issued: ticketing.ticket-issued
       dlq: ticketing.dlq
     # Queue declaration at startup (before relay enabled)

@@ -55,7 +55,8 @@ public class ITextPdfGenerator implements PdfGeneratorPort {
 
             addTableRow(table, "Movie", ticket.getMovieTitleSnapshot());
             addTableRow(table, "Room", ticket.getRoomNameSnapshot());
-            addTableRow(table, "Showtime", ticket.getShowtimeStartsAt().toString());
+            addTableRow(table, "Showtime", ticket.getShowtimeStartsAt() == null
+                    ? "To be confirmed" : ticket.getShowtimeStartsAt().toString());
             addTableRow(table, "Seats", String.join(", ", ticket.getSeatLabelsSnapshot()));
             addTableRow(table, "Reservation ID", ticket.getReservationId().toString());
             addTableRow(table, "QR Payload", ticket.getQrPayload());

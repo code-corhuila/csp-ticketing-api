@@ -108,15 +108,11 @@ public class TicketingConfiguration {
         Queue userEmailChanged = durableWithDeadLetter(userEmailChangedQueue);
         Queue userEmailChangedDlq = new Queue(userEmailChangedQueue + DLQ_SUFFIX, true);
 
-        Queue bookingConfirmed = QueueBuilder.durable(bookingConfirmedQueue)
-                .withArgument("x-dead-letter-exchange", "cine.dlx")
-                .withArgument("x-dead-letter-routing-key", "ticketing.dlq")
-                .build();
-
-        Queue concessionOrderConfirmed = QueueBuilder.durable(concessionOrderConfirmedQueue)
-                .withArgument("x-dead-letter-exchange", "cine.dlx")
-                .withArgument("x-dead-letter-routing-key", "ticketing.dlq")
-                .build();
+        // Booking and Concessions events: the same shape, one dead-letter queue per queue (ADR-007, ADR-036).
+        Queue bookingConfirmed = durableWithDeadLetter(bookingConfirmedQueue);
+        Queue bookingConfirmedDlq = new Queue(bookingConfirmedQueue + DLQ_SUFFIX, true);
+        Queue concessionOrderConfirmed = durableWithDeadLetter(concessionOrderConfirmedQueue);
+        Queue concessionOrderConfirmedDlq = new Queue(concessionOrderConfirmedQueue + DLQ_SUFFIX, true);
 
         Queue ticketIssued = QueueBuilder.durable(ticketIssuedQueue)
                 .withArgument("x-dead-letter-exchange", "cine.dlx")
@@ -131,12 +127,15 @@ public class TicketingConfiguration {
         Binding b3 = BindingBuilder.bind(concessionOrderConfirmed).to(mainExchange).with("cine.concessions.order-confirmed.v1");
         Binding b4 = BindingBuilder.bind(ticketIssued).to(mainExchange).with("cine.ticketing_fulfillment.ticket-issued.v1");
         Binding b5 = BindingBuilder.bind(bookingConfirmed).to(mainExchange).with(bookingConfirmedRoutingKey);
+        Binding d3 = BindingBuilder.bind(bookingConfirmedDlq).to(dlxExchange).with(bookingConfirmedQueue + DLQ_SUFFIX);
+        Binding d4 = BindingBuilder.bind(concessionOrderConfirmedDlq).to(dlxExchange)
+                .with(concessionOrderConfirmedQueue + DLQ_SUFFIX);
 
         return new Declarables(
                 userRegistered, userEmailChanged, bookingConfirmed, concessionOrderConfirmed, ticketIssued,
-                userRegisteredDlq, userEmailChangedDlq,
+                userRegisteredDlq, userEmailChangedDlq, bookingConfirmedDlq, concessionOrderConfirmedDlq,
                 dlq, mainExchange, dlxExchange,
-                b1, b2, b3, b4, b5, d1, d2, sharedDlq
+                b1, b2, b3, b4, b5, d1, d2, d3, d4, sharedDlq
         );
     }
 

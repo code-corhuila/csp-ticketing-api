@@ -25,7 +25,11 @@ public class Ticket {
     @Column(name = "id", nullable = false, updatable = false)
     private UUID id;
 
-    @Column(name = "user_contact_id", nullable = false)
+    @Column(name = "user_id", nullable = false)
+    private UUID userId;
+
+    /** Empty while the contact projection of the user does not exist yet (ADR-057). */
+    @Column(name = "user_contact_id")
     private UUID userContactId;
 
     @Column(name = "reservation_id", nullable = false, unique = true)
@@ -40,7 +44,8 @@ public class Ticket {
     @Column(name = "room_name_snapshot", nullable = false, length = 160)
     private String roomNameSnapshot;
 
-    @Column(name = "showtime_starts_at", nullable = false)
+    /** Null while Catalog does not exist: Booking sends no start time (ADR-020). */
+    @Column(name = "showtime_starts_at")
     private Instant showtimeStartsAt;
 
     @JdbcTypeCode(SqlTypes.JSON)
