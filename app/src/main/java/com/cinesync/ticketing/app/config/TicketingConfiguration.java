@@ -28,6 +28,8 @@ import org.springframework.retry.policy.SimpleRetryPolicy;
 import org.springframework.util.backoff.ExponentialBackOff;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.SerializationFeature;
+import com.fasterxml.jackson.databind.json.JsonMapper;
 import java.time.Clock;
 import java.util.Map;
 import java.util.Properties;
@@ -191,6 +193,7 @@ public class TicketingConfiguration {
     @Bean
     @ConditionalOnMissingBean
     public ObjectMapper objectMapper() {
-        return new com.fasterxml.jackson.databind.ObjectMapper();
+        // Dates go out as RFC 3339 text (norm 5.3), not as numbers, and java.time types are understood.
+        return JsonMapper.builder().findAndAddModules().disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS).build();
     }
 }
