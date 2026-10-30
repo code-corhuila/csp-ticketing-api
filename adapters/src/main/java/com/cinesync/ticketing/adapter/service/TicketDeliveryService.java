@@ -97,8 +97,12 @@ public class TicketDeliveryService implements TicketDeliveryUseCase {
         int failed = 0;
         for (UUID fulfillmentId : fulfillmentRepository.findDeliverable(clock.instant(), limit).stream()
                 .map(TicketingFulfillment::getId).toList()) {
-            TicketingFulfillment.FulfillmentStatus status = transaction.execute(tx -> dispatch(fulfillmentId));
-            switch (status) {
+            Optional<TicketingFulfillment.FulfillmentStatus> status = transaction.execute(tx -> dispatch(fulfillmentId));
+            if (status.isEmpty()) {
+                log.info("Fulfillment {} is taken by another run or no longer due, skipping", fulfillmentId);
+                continue;
+            }
+            switch (status.get()) {
                 case SENT -> sent++;
                 case FAILED -> failed++;
                 default -> retried++;
@@ -107,10 +111,15 @@ public class TicketDeliveryService implements TicketDeliveryUseCase {
         return new DispatchResult(sent, retried, failed);
     }
 
-    private TicketingFulfillment.FulfillmentStatus dispatch(UUID fulfillmentId) {
-        TicketingFulfillment fulfillment = fulfillmentRepository.findById(fulfillmentId).orElseThrow();
-        Ticket ticket = ticketRepository.findById(fulfillment.getTicketId()).orElseThrow();
+    /** The delivery stays locked while the email is sent, so a second run cannot send it too (HU-TICKETING-003). */
+    private Optional<TicketingFulfillment.FulfillmentStatus> dispatch(UUID fulfillmentId) {
         Instant now = clock.instant();
+        Optional<TicketingFulfillment> claimed = fulfillmentRepository.claimDeliverable(fulfillmentId, now);
+        if (claimed.isEmpty()) {
+            return Optional.empty();
+        }
+        TicketingFulfillment fulfillment = claimed.get();
+        Ticket ticket = ticketRepository.findById(fulfillment.getTicketId()).orElseThrow();
         Optional<UserContact> contact = userContactRepository.findByUserId(ticket.getUserId());
         if (contact.isEmpty()) {
             fulfillment.recordFailedAttempt("The contact of the user is not known yet", now);
@@ -129,7 +138,7 @@ public class TicketDeliveryService implements TicketDeliveryUseCase {
             }
         }
         fulfillmentRepository.save(fulfillment);
-        return fulfillment.getStatus();
+        return Optional.of(fulfillment.getStatus());
     }
 
     private OutboxEvent ticketIssued(Ticket ticket, String correlationId) {
