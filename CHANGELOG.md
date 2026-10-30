@@ -23,6 +23,7 @@
 - `BookingConfirmed` is validated like the Auth events: a message that can never succeed goes to the dead-letter queue without retries.
 
 ### Fixed
+- The service no longer declares the exchanges `cine.events` and `cine.dlx` (ADR-036): they belong to `csp-infra-rabbitmq` and the login `ticketing_fulfillment` may configure only `cine.ticketing_fulfillment.*`, so against the real broker the declaration was refused with `ACCESS_REFUSED` and no queue or consumer started. The bindings use the exchanges by name. `TicketingQueuesTest` checks it (HU-TICKETING-002).
 - The `TicketIssued` queue is named `cine.ticketing_fulfillment.ticket-issued` and has its own dead-letter queue `.dlq`, like the other queues (ADR-007, ADR-036). It was `ticketing.ticket-issued` with a shared `ticketing.dlq`, names outside what the broker lets the login `ticketing_fulfillment` configure (`cine.ticketing_fulfillment.*`), so the declaration was refused. `TicketingQueuesTest` checks every declared queue against that pattern and the dead-letter wiring (HU-TICKETING-002).
 - The JPA repositories could not be created (`findByUserContactId` and `findPendingForRetry` were not valid queries), so no ticket could be stored. The unused `findByUserContactId` methods are removed and `findPendingForRetry` is a real query.
 - `ConcessionOrderConfirmedConsumerTest` never ran (no schema, bean clash with the projection test); its scenarios, the concession arriving before or after the booking, are now in `BookingConfirmedConsumerTest`.
