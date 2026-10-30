@@ -73,10 +73,19 @@ ticketing:
       user-email-changed: cine.ticketing_fulfillment.user-email-changed
       booking-confirmed: cine.ticketing_fulfillment.booking-confirmed
       concession-order-confirmed: cine.ticketing_fulfillment.concession-order-confirmed
-      ticket-issued: ticketing.ticket-issued
-      dlq: ticketing.dlq
+      ticket-issued: cine.ticketing_fulfillment.ticket-issued
     # Queue declaration at startup (before relay enabled)
     declare-at-startup: true
+
+  # The bucket of the ticket PDFs (ADR-058). The API only reads it; csp-worker writes it. No default for the secrets.
+  object-storage:
+    url: ${OBJECT_STORAGE_URL:http://rustfs:9000}
+    access-key: ${OBJECT_STORAGE_ACCESS_KEY:}
+    secret-key: ${OBJECT_STORAGE_SECRET_KEY:}
+    bucket: ${OBJECT_STORAGE_BUCKET:tickets}
+  # Where the email sends the user to download the PDF (ADR-058).
+  portal:
+    url: ${TICKETING_PORTAL_URL:http://localhost:4200}
 
   jwt:
     public-key: ${JWT_PUBLIC_KEY:}

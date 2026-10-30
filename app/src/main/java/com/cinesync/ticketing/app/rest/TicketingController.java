@@ -45,7 +45,8 @@ public class TicketingController {
                 "database", getComponentStatus(health, "db"),
                 "broker", getComponentStatus(health, "rabbit"),
                 "emailProvider", getComponentStatus(health, "mail"),
-                "consumers", getComponentStatus(health, "consumers")
+                "consumers", getComponentStatus(health, "consumers"),
+                "objectStorage", getComponentStatus(health, "objectStorage")
         );
 
         boolean ready = Status.UP.equals(health.getStatus());

@@ -1,5 +1,6 @@
 package com.cinesync.ticketing.app.rest.internal;
 
+import com.cinesync.ticketing.app.rest.ErrorResponse;
 import com.cinesync.ticketing.core.model.TicketNotFoundException;
 import com.cinesync.ticketing.core.port.in.TicketDeliveryUseCase;
 import com.cinesync.ticketing.core.port.in.TicketDeliveryUseCase.DispatchResult;
@@ -80,7 +81,4 @@ public class TicketingInternalController {
             super(message);
         }
     }
-
-    /** The single error envelope of the platform. */
-    public record ErrorResponse(String error, String message, List<String> details, String traceId) {}
 }
