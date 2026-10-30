@@ -6,9 +6,12 @@ import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Modifying;
+import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
+
+import jakarta.persistence.LockModeType;
 
 import java.time.Instant;
 import java.util.List;
@@ -19,6 +22,15 @@ import java.util.UUID;
 public interface TicketJpaRepository extends JpaRepository<Ticket, UUID>, TicketRepository {
     @Override
     Optional<Ticket> findByReservationId(UUID reservationId);
+
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("SELECT t FROM Ticket t WHERE t.id = :id")
+    Optional<Ticket> lockById(@Param("id") UUID id);
+
+    @Override
+    default Optional<Ticket> findByIdForUpdate(UUID id) {
+        return lockById(id);
+    }
 
     @Query("SELECT t FROM Ticket t WHERE t.pdfUrl IS NULL AND t.createdAt < :createdBefore ORDER BY t.createdAt")
     List<Ticket> findAwaiting(@Param("createdBefore") Instant createdBefore, Pageable pageable);

@@ -10,6 +10,8 @@ import java.util.UUID;
 public interface TicketRepository {
     Optional<Ticket> findByReservationId(UUID reservationId);
     Optional<Ticket> findById(UUID id);
+    /** The ticket, locked until the current transaction ends, so concurrent changes to it run one at a time. */
+    Optional<Ticket> findByIdForUpdate(UUID id);
     Ticket save(Ticket ticket);
     /** Tickets created before the given instant that have no PDF yet, oldest first. */
     List<Ticket> findAwaitingPdf(Instant createdBefore, int limit);
