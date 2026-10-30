@@ -4,6 +4,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.amqp.core.Binding;
 import org.springframework.amqp.core.Declarables;
+import org.springframework.amqp.core.Exchange;
 import org.springframework.amqp.core.Queue;
 import org.springframework.beans.factory.config.YamlPropertiesFactoryBean;
 import org.springframework.core.io.ClassPathResource;
@@ -86,6 +87,12 @@ class TicketingQueuesTest {
             assertThat(binding.getExchange()).isEqualTo("cine.events");
             assertThat(binding.getRoutingKey()).isEqualTo("cine.ticketing_fulfillment.ticket-issued.v1");
         });
+    }
+
+    @Test
+    void noExchangeIsDeclaredBecauseTheyBelongToTheBrokerRepositoryAndTheLoginCannotConfigureThem() {
+        assertThat(declared.getDeclarablesByType(Exchange.class)).isEmpty();
+        assertThat(bindings()).extracting(Binding::getExchange).containsOnly("cine.events", "cine.dlx");
     }
 
     @Test
