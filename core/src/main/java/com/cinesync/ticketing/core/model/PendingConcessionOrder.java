@@ -3,7 +3,9 @@ package com.cinesync.ticketing.core.model;
 import jakarta.persistence.*;
 import lombok.*;
 import org.hibernate.annotations.CreationTimestamp;
+import org.hibernate.annotations.JdbcTypeCode;
 import org.hibernate.annotations.UpdateTimestamp;
+import org.hibernate.type.SqlTypes;
 
 import java.time.Instant;
 import java.util.UUID;
@@ -21,6 +23,7 @@ public class PendingConcessionOrder {
     @Column(name = "reservation_id", nullable = false, updatable = false)
     private UUID reservationId;
 
+    @JdbcTypeCode(SqlTypes.JSON)
     @Column(name = "items_json", nullable = false, columnDefinition = "jsonb")
     private String itemsJson;
 
