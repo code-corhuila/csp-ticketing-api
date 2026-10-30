@@ -1,0 +1,69 @@
+package com.cinesync.ticketing.core.model;
+
+import jakarta.persistence.*;
+import lombok.*;
+import org.hibernate.annotations.CreationTimestamp;
+import org.hibernate.annotations.UpdateTimestamp;
+
+import java.time.Instant;
+import java.util.Locale;
+import java.util.UUID;
+
+@Entity
+@Table(name = "user_contact", schema = "ticketing_fulfillment")
+@Getter
+@Setter
+@NoArgsConstructor
+@AllArgsConstructor
+@Builder
+public class UserContact {
+
+    @Id
+    @GeneratedValue
+    @Column(name = "id", nullable = false, updatable = false)
+    private UUID id;
+
+    @Column(name = "user_id", nullable = false, unique = true)
+    private UUID userId;
+
+    @Column(name = "email", nullable = false, length = 255)
+    private String email;
+
+    @Column(name = "last_updated_at", nullable = false)
+    private Instant lastUpdatedAt;
+
+    @CreationTimestamp
+    @Column(name = "created_at", nullable = false, updatable = false)
+    private Instant createdAt;
+
+    @UpdateTimestamp
+    @Column(name = "updated_at", nullable = false)
+    private Instant updatedAt;
+
+    public static UserContact of(UUID userId, String email, Instant occurredAt) {
+        return UserContact.builder()
+                .userId(userId)
+                .email(normalize(email))
+                .lastUpdatedAt(occurredAt)
+                .build();
+    }
+
+    /**
+     * Applies an email from an Auth event only if the event is newer than the last one applied,
+     * so a redelivered or out-of-order event never overwrites a newer address.
+     *
+     * @return true when the contact changed
+     */
+    public boolean applyChange(String newEmail, Instant occurredAt) {
+        if (!occurredAt.isAfter(lastUpdatedAt)) {
+            return false;
+        }
+        this.email = normalize(newEmail);
+        this.lastUpdatedAt = occurredAt;
+        return true;
+    }
+
+    private static String normalize(String email) {
+        return email.trim().toLowerCase(Locale.ROOT);
+    }
+}
