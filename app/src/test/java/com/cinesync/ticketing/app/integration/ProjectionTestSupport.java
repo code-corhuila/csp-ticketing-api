@@ -28,9 +28,15 @@ import org.springframework.test.context.DynamicPropertySource;
 import org.testcontainers.containers.PostgreSQLContainer;
 import org.testcontainers.containers.RabbitMQContainer;
 
+import com.rabbitmq.client.Channel;
+import com.rabbitmq.client.Connection;
+import com.rabbitmq.client.ConnectionFactory;
+
+import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.util.UUID;
+import java.util.concurrent.TimeoutException;
 
 /**
  * Real RabbitMQ and PostgreSQL plus the consumers of the service: the listeners, the command service, the
@@ -68,6 +74,20 @@ abstract class ProjectionTestSupport {
     static {
         postgres.start();
         rabbitMQ.start();
+        declareTheExchangesOfTheBrokerRepository();
+    }
+
+    /** The broker of the platform has both exchanges before any service starts (csp-infra-rabbitmq, ADR-036); the service never declares them. */
+    private static void declareTheExchangesOfTheBrokerRepository() {
+        ConnectionFactory factory = new ConnectionFactory();
+        factory.setHost(rabbitMQ.getHost());
+        factory.setPort(rabbitMQ.getAmqpPort());
+        try (Connection connection = factory.newConnection(); Channel channel = connection.createChannel()) {
+            channel.exchangeDeclare(EXCHANGE, "topic", true);
+            channel.exchangeDeclare("cine.dlx", "topic", true);
+        } catch (IOException | TimeoutException e) {
+            throw new IllegalStateException("The test broker cannot declare the exchanges", e);
+        }
     }
 
     @DynamicPropertySource
