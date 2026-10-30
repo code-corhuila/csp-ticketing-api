@@ -83,6 +83,8 @@ ticketing:
     access-key: ${OBJECT_STORAGE_ACCESS_KEY:}
     secret-key: ${OBJECT_STORAGE_SECRET_KEY:}
     bucket: ${OBJECT_STORAGE_BUCKET:tickets}
+    # Given to the client so that it never asks for the location of the bucket, which the read-only account may not do.
+    region: ${OBJECT_STORAGE_REGION:us-east-1}
   # Where the email sends the user to download the PDF (ADR-058).
   portal:
     url: ${TICKETING_PORTAL_URL:http://localhost:4200}

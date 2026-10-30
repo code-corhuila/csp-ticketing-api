@@ -32,11 +32,13 @@ public class S3TicketPdfStorage implements TicketPdfStorage {
             @Value("${ticketing.object-storage.url}") String url,
             @Value("${ticketing.object-storage.access-key}") String accessKey,
             @Value("${ticketing.object-storage.secret-key}") String secretKey,
-            @Value("${ticketing.object-storage.bucket:tickets}") String bucket) {
+            @Value("${ticketing.object-storage.bucket:tickets}") String bucket,
+            @Value("${ticketing.object-storage.region:us-east-1}") String region) {
         if (accessKey.isBlank() || secretKey.isBlank()) {
             throw new IllegalStateException("OBJECT_STORAGE_ACCESS_KEY and OBJECT_STORAGE_SECRET_KEY are required");
         }
-        this.client = MinioClient.builder().endpoint(url).credentials(accessKey, secretKey).build();
+        // The region is given so that the client never asks for the location of the bucket, which the read-only account may not do.
+        this.client = MinioClient.builder().endpoint(url).credentials(accessKey, secretKey).region(region).build();
         this.bucket = bucket;
     }
 
