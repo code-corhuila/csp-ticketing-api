@@ -20,14 +20,22 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.jdbc.core.JdbcTemplate;
 
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
+import java.util.concurrent.Callable;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.reset;
 import static org.mockito.Mockito.verify;
@@ -190,6 +198,44 @@ class TicketDeliveryTest extends ProjectionTestSupport {
         assertThat(reloaded.getStatus()).isEqualTo(FulfillmentStatus.PENDING);
         assertThat(reloaded.getAttempts()).isEqualTo(1);
         assertThat(reloaded.getLastError()).contains("IllegalStateException");
+    }
+
+    @Test
+    void overlappingDispatchRuns_sendEachEmailOnce() throws Exception {
+        int tickets = 10;
+        for (int i = 0; i < tickets; i++) {
+            UUID userId = UUID.randomUUID();
+            contactFor(userId);
+            pendingFor(ticket(userId, PDF_URL));
+        }
+        // A slow provider keeps the first run inside its send long enough for the second to read the same rows.
+        doAnswer(invocation -> {
+            Thread.sleep(50);
+            return null;
+        }).when(emailSender).sendTicketEmail(any(), any(), any());
+
+        ExecutorService pool = Executors.newFixedThreadPool(2);
+        try {
+            CountDownLatch start = new CountDownLatch(1);
+            Callable<DispatchResult> run = () -> {
+                start.await();
+                return delivery.dispatchDue(tickets);
+            };
+            List<Future<DispatchResult>> runs = new ArrayList<>();
+            runs.add(pool.submit(run));
+            runs.add(pool.submit(run));
+            start.countDown();
+            for (Future<DispatchResult> result : runs) {
+                result.get();
+            }
+        } finally {
+            pool.shutdownNow();
+        }
+
+        verify(emailSender, times(tickets)).sendTicketEmail(any(), any(), any());
+        assertThat(jdbc.queryForObject(
+                "SELECT count(*) FROM ticketing_fulfillment.ticketing_fulfillments WHERE status = 'SENT'",
+                Integer.class)).isEqualTo(tickets);
     }
 
     private void age(Ticket ticket, int seconds) {
