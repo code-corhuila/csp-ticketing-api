@@ -54,6 +54,10 @@ public class TicketDeliveryService implements TicketDeliveryUseCase {
     @Value("${ticketing.pdf.min-age-seconds:60}")
     private long minAgeSeconds;
 
+    /** Base of the portal, where the user signs in and downloads the PDF (ADR-058). */
+    @Value("${ticketing.portal.url:http://localhost:4200}")
+    private String portalUrl;
+
     @Override
     @Transactional(readOnly = true)
     public List<TicketToRender> awaitingPdf(int limit) {
@@ -112,7 +116,7 @@ public class TicketDeliveryService implements TicketDeliveryUseCase {
             fulfillment.recordFailedAttempt("The contact of the user is not known yet", now);
         } else {
             try {
-                TicketEmail email = TicketEmail.of(ticket);
+                TicketEmail email = TicketEmail.of(ticket, portalUrl);
                 emailSender.sendTicketEmail(contact.get().getEmail(), email.subject(), email.htmlBody());
                 if (ticket.getUserContactId() == null) {
                     ticket.setUserContactId(contact.get().getId());
