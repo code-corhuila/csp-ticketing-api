@@ -27,6 +27,7 @@ import org.springframework.context.annotation.Configuration;
 import org.springframework.mail.javamail.JavaMailSender;
 import org.springframework.mail.javamail.JavaMailSenderImpl;
 import org.springframework.retry.policy.SimpleRetryPolicy;
+import org.springframework.util.backoff.ExponentialBackOff;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.util.Map;
@@ -132,10 +133,10 @@ public class TicketingConfiguration {
         Binding b5 = BindingBuilder.bind(bookingConfirmed).to(mainExchange).with(bookingConfirmedRoutingKey);
 
         return new Declarables(
-                userRegistered, userEmailChanged, concessionOrderConfirmed, ticketIssued,
+                userRegistered, userEmailChanged, bookingConfirmed, concessionOrderConfirmed, ticketIssued,
                 userRegisteredDlq, userEmailChangedDlq,
                 dlq, mainExchange, dlxExchange,
-                b1, b2, d1, d2, sharedDlq
+                b1, b2, b3, b4, b5, d1, d2, sharedDlq
         );
     }
 
@@ -149,13 +150,15 @@ public class TicketingConfiguration {
     @Bean
     public SimpleRabbitListenerContainerFactory rabbitListenerContainerFactory(
             SimpleRabbitListenerContainerFactoryConfigurer configurer,
-            ConnectionFactory connectionFactory,
-            @Value("${ticketing.rabbitmq.consumer.cancel.log-warn:true}") boolean logCancelWarn
+            ConnectionFactory connectionFactory
     ) {
         SimpleRabbitListenerContainerFactory factory = new SimpleRabbitListenerContainerFactory();
         configurer.configure(factory, connectionFactory);
 
-        factory.setRecoveryInterval(1000L);
+        // A cancelled consumer or a deleted queue is recovered forever: 1 s, doubling up to 30 s, no attempt limit.
+        ExponentialBackOff recoveryBackOff = new ExponentialBackOff(1000L, 2.0);
+        recoveryBackOff.setMaxInterval(30_000L);
+        factory.setRecoveryBackOff(recoveryBackOff);
 
         factory.setMissingQueuesFatal(false);
         factory.setAutoStartup(true);
