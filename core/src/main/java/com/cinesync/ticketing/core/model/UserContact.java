@@ -9,7 +9,7 @@ import java.time.Instant;
 import java.util.UUID;
 
 @Entity
-@Table(name = "user_contacts", schema = "ticketing_fulfillment")
+@Table(name = "user_contact", schema = "ticketing_fulfillment")
 @Getter
 @Setter
 @NoArgsConstructor
@@ -39,8 +39,8 @@ public class UserContact {
     @Column(name = "updated_at", nullable = false)
     private Instant updatedAt;
 
-    public void updateEmail(String newEmail) {
+    public void updateEmail(String newEmail, Instant occurredAt) {
         this.email = newEmail;
-        this.lastUpdatedAt = Instant.now();
+        this.lastUpdatedAt = occurredAt;
     }
 }
