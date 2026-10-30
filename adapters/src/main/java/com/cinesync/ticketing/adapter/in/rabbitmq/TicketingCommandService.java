@@ -10,14 +10,19 @@ import com.cinesync.ticketing.core.port.out.TicketRepository;
 import com.cinesync.ticketing.core.port.out.TicketingFulfillmentRepository;
 import com.cinesync.ticketing.core.port.out.UserContactRepository;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.core.type.TypeReference;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
+import java.util.Collections;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
@@ -30,6 +35,9 @@ public class TicketingCommandService implements TicketingCommandUseCase {
     private final InboxEventRepository inboxEventRepository;
     private final EventPublisherPort eventPublisherPort;
     private final ObjectMapper objectMapper;
+
+    // Store pending concessions for reservations that don't have a ticket yet (order doesn't matter)
+    private final ConcurrentHashMap<UUID, List<Ticket.ConcessionItem>> pendingConcessions = new ConcurrentHashMap<>();
 
     @Override
     @Transactional
@@ -98,6 +106,9 @@ public class TicketingCommandService implements TicketingCommandUseCase {
 
         ticket = ticketRepository.save(ticket);
 
+        // Merge any pending concessions that arrived before BookingConfirmed (order doesn't matter)
+        mergePendingConcessions(reservationId, ticket);
+
         TicketingFulfillment fulfillment = TicketingFulfillment.builder()
                 .ticketId(ticket.getId())
                 .channel("EMAIL")
@@ -116,28 +127,104 @@ public class TicketingCommandService implements TicketingCommandUseCase {
     public void handleConcessionOrderConfirmed(UUID reservationId, String itemsJson, String eventId, String correlationId) {
         log.info("Processing ConcessionOrderConfirmed: reservationId={}, eventId={}, correlationId={}", reservationId, eventId, correlationId);
 
-        // 1. DEDUP: If already processed, skip (using tryInsert pattern from inbox_event)
-        UUID eventIdUuid = UUID.fromString(eventId);
-        if (!inboxEventRepository.tryInsert(eventIdUuid, "ConcessionOrderConfirmed")) {
-            log.info("ConcessionOrderConfirmed already processed: eventId={}", eventId);
-            return;
-        }
-
         try {
-            List<Ticket.ConcessionItem> items = objectMapper.readValue(itemsJson,
-                    objectMapper.getTypeFactory().constructCollectionType(List.class, Ticket.ConcessionItem.class));
+            List<Ticket.ConcessionItem> items = parseConcessionItems(itemsJson);
 
             int updated = ticketRepository.updateConcessionsSnapshotByReservationId(reservationId, items);
             if (updated > 0) {
                 log.info("Updated concessions snapshot for reservationId: {}", reservationId);
             } else {
-                // 3. ORDER DOESN'T MATTER: If ticket doesn't exist yet (BookingConfirmed hasn't arrived),
-                //    the snapshot will be merged when the ticket is created via BookingConfirmed
-                log.info("No ticket found for reservationId: {} yet, concessions snapshot will be merged on ticket creation", reservationId);
+                // ORDER DOESN'T MATTER: If ticket doesn't exist yet (BookingConfirmed hasn't arrived),
+                // store concessions as pending to be merged when ticket is created via BookingConfirmed
+                log.info("No ticket found for reservationId: {} yet, storing pending concessions for later merge", reservationId);
+                pendingConcessions.put(reservationId, items);
             }
         } catch (Exception e) {
             log.error("Failed to parse concessions items: {}", e.getMessage(), e);
             throw new IllegalArgumentException("Invalid concessions items JSON", e);
+        }
+    }
+
+    /** Parse concession items from JSON payload, mapping field names to Ticket.ConcessionItem */
+    /** Payload fields: itemType, itemId, itemName, unitPrice (cents), quantity */
+    /** Ticket.ConcessionItem fields: name, quantity, unitPriceCents */
+    private List<Ticket.ConcessionItem> parseConcessionItems(String itemsJson) {
+        try {
+            ObjectMapper mapper = new ObjectMapper();
+            // Read as generic map to allow field mapping
+            Map<String, Object> itemMap = mapper.readValue(itemsJson, new TypeReference<Map<String, Object>>() {});
+
+            // Get the items list - could be "items" key or direct array
+            List<Map<String, Object>> itemLists;
+            Object itemsObj = itemMap.get("items");
+            if (itemsObj instanceof List) {
+                @SuppressWarnings("unchecked")
+                List<Map<String, Object>> items = (List<Map<String, Object>>) itemsObj;
+                itemLists = items;
+            } else {
+                // If no "items" key, treat the whole map as a single item map
+                itemLists = Collections.singletonList(itemMap);
+            }
+
+            return itemLists.stream().map(item -> {
+                Ticket.ConcessionItem concessionItem = new Ticket.ConcessionItem();
+                // Map itemName -> name (may be "itemName" or "name" in payload)
+                String name = (String) item.get("itemName");
+                if (name == null) {
+                    name = (String) item.get("name");
+                }
+                concessionItem.setName(name);
+
+                // Map quantity
+                Object quantityObj = item.get("quantity");
+                int quantity = 1;
+                if (quantityObj != null) {
+                    if (quantityObj instanceof Number) {
+                        quantity = ((Number) quantityObj).intValue();
+                    } else {
+                        try {
+                            quantity = Integer.parseInt(quantityObj.toString());
+                        } catch (NumberFormatException e) {
+                            quantity = 1;
+                        }
+                    }
+                }
+                concessionItem.setQuantity(quantity);
+
+                // Map unitPrice -> unitPriceCents (both in cents, just rename)
+                Object priceObj = item.get("unitPrice");
+                if (priceObj == null) {
+                    priceObj = item.get("unitPriceCents");
+                }
+                int price = 0;
+                if (priceObj != null) {
+                    if (priceObj instanceof Number) {
+                        price = ((Number) priceObj).intValue();
+                    } else {
+                        try {
+                            price = Integer.parseInt(priceObj.toString());
+                        } catch (NumberFormatException e) {
+                            price = 0;
+                        }
+                    }
+                }
+                concessionItem.setUnitPriceCents(price);
+
+                return concessionItem;
+            }).collect(Collectors.toList());
+        } catch (Exception e) {
+            log.error("Failed to parse concession items JSON: {}", e.getMessage());
+            return Collections.emptyList();
+        }
+    }
+
+    /** Merge pending concessions into newly created ticket */
+    private void mergePendingConcessions(UUID reservationId, Ticket ticket) {
+        List<Ticket.ConcessionItem> pending = pendingConcessions.remove(reservationId);
+        if (pending != null && !pending.isEmpty()) {
+            ticket.setConcessionsSnapshot(pending);
+            ticketRepository.save(ticket);
+            log.info("Merged {} pending concession items into ticket for reservationId: {}", pending.size(), reservationId);
         }
     }
 
