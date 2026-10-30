@@ -3,6 +3,7 @@
 ## [Unreleased]
 
 ### Fixed
+- Two overlapping runs of `POST /internal/fulfillments/dispatch` read the same pending deliveries and both sent the email, because nothing claimed a delivery before sending. Each delivery is now locked with `FOR UPDATE SKIP LOCKED` for the whole transaction that sends it, so a run skips what another run holds or has already sent. A crash between the send and the commit can still repeat one email (HU-TICKETING-003, FR-TICKETING-003). `overlappingDispatchRuns_sendEachEmailOnce` runs two dispatches at once.
 - A concession order that arrives before the booking was never stored: the pending order inserted its items as text into a `jsonb` column and the transaction failed, so the message was retried and dead-lettered unless the ticket appeared in the meantime. `PendingConcessionOrder.itemsJson` is now mapped as JSON, like the JSON columns of `Ticket` (HU-TICKETING-002, `csp-ticketing-api#5`). The test that exercised this path only passed through those retries; it now waits for the inbox row of the concession event.
 - The booking and the concession order of a reservation are consumed by two listeners at the same time and each looks for what the other stores, so both could miss it and leave the ticket without its concessions, with the pending order orphaned. Both handlers now take a transaction lock per reservation (`pg_advisory_xact_lock`), and `ConcessionBookingRaceTest` runs 80 pairs at once.
 
