@@ -55,7 +55,7 @@ class BookingConfirmedConsumerTest extends ProjectionTestSupport {
     private static String concessionOrderConfirmed(UUID reservationId) {
         return """
                 {"eventId":"%s","eventType":"ConcessionOrderConfirmed","occurredAt":"2026-10-30T15:00:00Z",
-                 "version":1,"source":"concessions-service","aggregateId":"%s",
+                 "version":1,"source":"concessions-service","aggregateId":"%s","aggregateType":"ConcessionOrder",
                  "payload":{"reservationId":"%s","items":[{"itemName":"Popcorn","quantity":2,"unitPrice":500}]},
                  "metadata":{"correlationId":"%s"}}
                 """.formatted(UUID.randomUUID(), reservationId, reservationId, UUID.randomUUID());
@@ -66,7 +66,7 @@ class BookingConfirmedConsumerTest extends ProjectionTestSupport {
         UUID orderId = UUID.randomUUID();
         return """
                 {"eventId":"%s","eventType":"ConcessionOrderConfirmed","occurredAt":"2026-10-30T15:00:00Z",
-                 "version":1,"source":"concessions-service","aggregateId":"%s",
+                 "version":1,"source":"concessions-service","aggregateId":"%s","aggregateType":"ConcessionOrder",
                  "payload":{"orderId":"%s","userId":"%s","reservationId":"%s","status":"CONFIRMED","totalAmount":%d,
                             "items":[{"itemType":"PRODUCT","itemId":"%s","itemName":"Popcorn","unitPrice":%d,"quantity":2},
                                      {"itemType":"COMBO","itemId":"%s","itemName":"Family combo","unitPrice":1500,"quantity":1}]},
