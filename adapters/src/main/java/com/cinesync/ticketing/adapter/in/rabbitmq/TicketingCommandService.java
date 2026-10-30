@@ -1,11 +1,13 @@
 package com.cinesync.ticketing.adapter.in.rabbitmq;
 
+import com.cinesync.ticketing.core.model.PendingConcessionOrder;
 import com.cinesync.ticketing.core.model.Ticket;
 import com.cinesync.ticketing.core.model.TicketingFulfillment;
 import com.cinesync.ticketing.core.model.UserContact;
 import com.cinesync.ticketing.core.port.in.TicketingCommandUseCase;
 import com.cinesync.ticketing.core.port.out.EventPublisherPort;
 import com.cinesync.ticketing.core.port.out.InboxEventRepository;
+import com.cinesync.ticketing.core.port.out.PendingConcessionOrderRepository;
 import com.cinesync.ticketing.core.port.out.TicketRepository;
 import com.cinesync.ticketing.core.port.out.TicketingFulfillmentRepository;
 import com.cinesync.ticketing.core.port.out.UserContactRepository;
@@ -29,13 +31,9 @@ public class TicketingCommandService implements TicketingCommandUseCase {
     private final TicketRepository ticketRepository;
     private final TicketingFulfillmentRepository fulfillmentRepository;
     private final InboxEventRepository inboxEventRepository;
+    private final PendingConcessionOrderRepository pendingConcessionOrderRepository;
     private final EventPublisherPort eventPublisherPort;
     private final ObjectMapper objectMapper;
-
-    // Store pending concessions for reservations that don't have a ticket yet (order doesn't matter)
-    // Persisted via inbox_event - see handleConcessionOrderConfirmed and mergePendingConcessions
-    // Key: reservationId, Value: JSON string of concession items
-    private final Map<UUID, String> pendingConcessionsJson = new HashMap<>();
 
     @Override
     @Transactional
@@ -130,26 +128,25 @@ public class TicketingCommandService implements TicketingCommandUseCase {
 
             if (items.isEmpty()) {
                 log.warn("Parsed concession items are empty for reservationId: {}, eventId: {}", reservationId, eventId);
-                // Do NOT save empty snapshot - let the message go through retry and then DLQ
-                // Instead, store as pending to be re-processed
-                storePendingConcessions(reservationId, itemsJson, eventId);
-                return;
+                // Throw exception to trigger retry/DLQ - do NOT store empty as pending
+                throw new IllegalArgumentException("Concession items parsed to empty list");
             }
 
             int updated = ticketRepository.updateConcessionsSnapshotByReservationId(reservationId, items);
             if (updated > 0) {
                 log.info("Updated concessions snapshot for reservationId: {}", reservationId);
+                // If there was a pending order, clean it up since we successfully applied the concessions
+                pendingConcessionOrderRepository.deleteByReservationId(reservationId);
             } else {
                 // ORDER DOESN'T MATTER: If ticket doesn't exist yet (BookingConfirmed hasn't arrived),
                 // store concessions as pending to be merged when ticket is created via BookingConfirmed
                 log.info("No ticket found for reservationId: {} yet, storing pending concessions for later merge", reservationId);
-                storePendingConcessions(reservationId, itemsJson, eventId);
+                storePendingConcessions(reservationId, itemsJson, eventId, correlationId);
             }
         } catch (Exception e) {
-            log.error("Failed to parse concessions items: {}", e.getMessage(), e);
-            // Store as pending so it can be retried; don't save empty snapshot that blocks real updates
-            storePendingConcessions(reservationId, itemsJson, eventId);
+            log.error("Failed to parse or process concessions items: {}", e.getMessage(), e);
             // Re-throw as runtime exception to let Spring RabbitMQ retry handling
+            // Max 3 attempts with growing delay, then DLQ per ADR-007
             throw new RuntimeException("Invalid concessions items JSON", e);
         }
     }
@@ -246,22 +243,29 @@ public class TicketingCommandService implements TicketingCommandUseCase {
             }).collect(Collectors.toList());
         } catch (Exception e) {
             log.error("Failed to parse concession items JSON: {}", e.getMessage());
-            return Collections.emptyList();
+            throw new IllegalArgumentException("Failed to parse concession items JSON", e);
         }
     }
 
-    /** Store pending concessions JSON in memory (will be merged when BookingConfirmed arrives) */
-    private void storePendingConcessions(UUID reservationId, String itemsJson, String eventId) {
-        pendingConcessionsJson.put(reservationId, itemsJson);
-        log.info("Stored pending concessions for reservationId: {}", reservationId);
+    /** Store pending concessions in database (will be merged when BookingConfirmed arrives) */
+    private void storePendingConcessions(UUID reservationId, String itemsJson, String eventId, String correlationId) {
+        PendingConcessionOrder pending = PendingConcessionOrder.builder()
+                .reservationId(reservationId)
+                .itemsJson(itemsJson)
+                .eventId(eventId)
+                .correlationId(correlationId)
+                .build();
+        pendingConcessionOrderRepository.save(pending);
+        log.info("Stored pending concessions in DB for reservationId: {}", reservationId);
     }
 
-    /** Merge pending concessions into newly created ticket */
+    /** Merge pending concessions from database into newly created ticket */
     private void mergePendingConcessions(UUID reservationId, Ticket ticket) {
-        String itemsJson = pendingConcessionsJson.remove(reservationId);
-        if (itemsJson != null && !itemsJson.isEmpty()) {
+        Optional<PendingConcessionOrder> pendingOpt = pendingConcessionOrderRepository.findByReservationId(reservationId);
+        if (pendingOpt.isPresent()) {
+            PendingConcessionOrder pending = pendingOpt.get();
             try {
-                List<Ticket.ConcessionItem> items = parseConcessionItems(itemsJson);
+                List<Ticket.ConcessionItem> items = parseConcessionItems(pending.getItemsJson());
                 if (!items.isEmpty()) {
                     ticket.setConcessionsSnapshot(items);
                     ticketRepository.save(ticket);
@@ -271,9 +275,12 @@ public class TicketingCommandService implements TicketingCommandUseCase {
                 }
             } catch (Exception e) {
                 log.error("Failed to parse pending concessions JSON for reservationId: {}", reservationId, e);
+            } finally {
+                // Always clean up pending order after attempting merge
+                pendingConcessionOrderRepository.deleteByReservationId(reservationId);
             }
         } else {
-            log.info("No pending concessions found for reservationId: {}", reservationId);
+            log.info("No pending concessions found in DB for reservationId: {}", reservationId);
         }
     }
 
