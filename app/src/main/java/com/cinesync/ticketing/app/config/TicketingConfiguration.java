@@ -125,7 +125,7 @@ public class TicketingConfiguration {
 
         Binding b1 = BindingBuilder.bind(userRegistered).to(mainExchange).with("user.registered");
         Binding b2 = BindingBuilder.bind(userEmailChanged).to(mainExchange).with("user.email.changed");
-        Binding b3 = BindingBuilder.bind(concessionOrderConfirmed).to(mainExchange).with("concession.order.confirmed");
+        Binding b3 = BindingBuilder.bind(concessionOrderConfirmed).to(mainExchange).with("cine.concessions.order-confirmed.v1");
         Binding b4 = BindingBuilder.bind(ticketIssued).to(mainExchange).with("cine.ticketing_fulfillment.ticket-issued.v1");
         Binding b5 = BindingBuilder.bind(bookingConfirmed).to(mainExchange).with(bookingConfirmedRoutingKey);
 
@@ -188,52 +188,5 @@ public class TicketingConfiguration {
     @ConditionalOnMissingBean
     public ObjectMapper objectMapper() {
         return new com.fasterxml.jackson.databind.ObjectMapper();
-    }
-
-    @Bean
-    @ConditionalOnMissingBean
-    public EmailSenderPort emailSenderPort(JavaMailSender mailSender) {
-        return new SmtpEmailSender(mailSender);
-    }
-
-    @Bean
-    @ConditionalOnMissingBean
-    public JavaMailSender javaMailSender(
-            @Value("${spring.mail.host}") String host,
-            @Value("${spring.mail.port}") int port,
-            @Value("${spring.mail.username}") String username,
-            @Value("${spring.mail.password}") String password,
-            @Value("${spring.mail.properties.mail.smtp.auth:true}") boolean auth,
-            @Value("${spring.mail.properties.mail.smtp.starttls.enable:true}") boolean starttls
-    ) {
-        JavaMailSenderImpl sender = new JavaMailSenderImpl();
-        sender.setHost(host);
-        sender.setPort(port);
-        sender.setUsername(username);
-        sender.setPassword(password);
-        Properties props = sender.getJavaMailProperties();
-        props.put("mail.smtp.auth", auth);
-        props.put("mail.smtp.starttls.enable", starttls);
-        return sender;
-    }
-
-    @Bean
-    @ConditionalOnMissingBean
-    public PdfGeneratorPort pdfGeneratorPort() {
-        return new ITextPdfGenerator();
-    }
-
-    @Bean
-    @ConditionalOnMissingBean
-    public EventPublisherPort eventPublisherPort(RabbitTemplate rabbitTemplate, ObjectMapper objectMapper) {
-        return new RabbitEventPublisher(rabbitTemplate, objectMapper);
-    }
-
-    @Bean
-    public RabbitTemplate rabbitTemplate(ConnectionFactory connectionFactory) {
-        RabbitTemplate template = new RabbitTemplate(connectionFactory);
-        template.setMessageConverter(new Jackson2JsonMessageConverter());
-        template.setMandatory(true);
-        return template;
     }
 }
