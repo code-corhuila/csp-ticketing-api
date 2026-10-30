@@ -61,7 +61,7 @@ class BookingConfirmedConsumerTest extends ProjectionTestSupport {
                 """.formatted(UUID.randomUUID(), reservationId, reservationId, UUID.randomUUID());
     }
 
-    /** The payload csp-concessions-api publishes (OrderService.event): every field of the order and of each line. */
+    /** The payload csp-concessions-api publishes for ConcessionOrderConfirmed (OrderService.event): the order and each line; {@code heldProducts} is only in ConcessionStockReserved. */
     private static String fullConcessionOrderConfirmed(UUID eventId, UUID reservationId, int unitPrice) {
         UUID orderId = UUID.randomUUID();
         return """
@@ -69,11 +69,10 @@ class BookingConfirmedConsumerTest extends ProjectionTestSupport {
                  "version":1,"source":"concessions-service","aggregateId":"%s",
                  "payload":{"orderId":"%s","userId":"%s","reservationId":"%s","status":"CONFIRMED","totalAmount":%d,
                             "items":[{"itemType":"PRODUCT","itemId":"%s","itemName":"Popcorn","unitPrice":%d,"quantity":2},
-                                     {"itemType":"COMBO","itemId":"%s","itemName":"Family combo","unitPrice":1500,"quantity":1}],
-                            "heldProducts":[{"productId":"%s","quantity":2}]},
+                                     {"itemType":"COMBO","itemId":"%s","itemName":"Family combo","unitPrice":1500,"quantity":1}]},
                  "metadata":{"correlationId":"%s"}}
                 """.formatted(eventId, orderId, orderId, UUID.randomUUID(), reservationId, unitPrice * 2 + 1500,
-                UUID.randomUUID(), unitPrice, UUID.randomUUID(), UUID.randomUUID(), UUID.randomUUID());
+                UUID.randomUUID(), unitPrice, UUID.randomUUID(), UUID.randomUUID());
     }
 
     private Ticket awaitTicket(UUID reservationId) {
