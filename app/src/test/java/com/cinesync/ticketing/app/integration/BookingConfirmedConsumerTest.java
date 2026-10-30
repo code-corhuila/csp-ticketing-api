@@ -52,13 +52,13 @@ class BookingConfirmedConsumerTest extends ProjectionTestSupport {
         return "\"" + instant + "\"";
     }
 
-    private static String concessionOrderConfirmed(UUID reservationId) {
+    private static String concessionOrderConfirmed(UUID eventId, UUID reservationId) {
         return """
                 {"eventId":"%s","eventType":"ConcessionOrderConfirmed","occurredAt":"2026-10-30T15:00:00Z",
                  "version":1,"source":"concessions-service","aggregateId":"%s","aggregateType":"ConcessionOrder",
                  "payload":{"reservationId":"%s","items":[{"itemName":"Popcorn","quantity":2,"unitPrice":500}]},
                  "metadata":{"correlationId":"%s"}}
-                """.formatted(UUID.randomUUID(), reservationId, reservationId, UUID.randomUUID());
+                """.formatted(eventId, reservationId, reservationId, UUID.randomUUID());
     }
 
     /** The payload csp-concessions-api publishes for ConcessionOrderConfirmed (OrderService.event): the order and each line; {@code heldProducts} is only in ConcessionStockReserved. */
@@ -137,10 +137,10 @@ class BookingConfirmedConsumerTest extends ProjectionTestSupport {
     @Test
     void concessionOrderConfirmedBeforeTheBooking_isAttachedToTheTicket() {
         UUID reservationId = UUID.randomUUID();
-        publish(CONCESSION_KEY, concessionOrderConfirmed(reservationId));
-        UUID barrier = UUID.randomUUID();
-        publish(BOOKING_KEY, bookingConfirmed(barrier, UUID.randomUUID(), UUID.randomUUID(), "null"));
-        await().atMost(15, TimeUnit.SECONDS).until(() -> inbox.findByEventId(barrier).isPresent());
+        UUID concessionEventId = UUID.randomUUID();
+        publish(CONCESSION_KEY, concessionOrderConfirmed(concessionEventId, reservationId));
+        // The inbox row of the concession event commits with its pending order: the booking is published only after that.
+        await().atMost(15, TimeUnit.SECONDS).until(() -> inbox.findByEventId(concessionEventId).isPresent());
 
         publish(BOOKING_KEY, bookingConfirmed(UUID.randomUUID(), reservationId, UUID.randomUUID(), "null"));
 
@@ -157,7 +157,7 @@ class BookingConfirmedConsumerTest extends ProjectionTestSupport {
         publish(BOOKING_KEY, bookingConfirmed(UUID.randomUUID(), reservationId, UUID.randomUUID(), "null"));
         awaitTicket(reservationId);
 
-        publish(CONCESSION_KEY, concessionOrderConfirmed(reservationId));
+        publish(CONCESSION_KEY, concessionOrderConfirmed(UUID.randomUUID(), reservationId));
 
         await().atMost(15, TimeUnit.SECONDS).untilAsserted(() -> assertThat(
                 tickets.findByReservationId(reservationId).orElseThrow().getConcessionsSnapshot()).hasSize(1));
