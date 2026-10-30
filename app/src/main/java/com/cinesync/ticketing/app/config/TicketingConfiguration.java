@@ -47,7 +47,8 @@ public class TicketingConfiguration {
 
     @Bean
     @ConditionalOnMissingBean
-    public JavaMailSender javaMailSender(
+    // Declared as the implementation: the mail health indicator of Spring Boot is registered only for a JavaMailSenderImpl bean.
+    public JavaMailSenderImpl javaMailSender(
             @Value("${spring.mail.host}") String host,
             @Value("${spring.mail.port}") int port,
             @Value("${spring.mail.username}") String username,
