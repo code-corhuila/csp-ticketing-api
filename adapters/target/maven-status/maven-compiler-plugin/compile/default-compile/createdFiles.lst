@@ -1,0 +1,10 @@
+com\cinesync\ticketing\adapter\in\rabbitmq\UserEventConsumer$EventHandler.class
+com\cinesync\ticketing\adapter\out\repository\TicketJpaRepository.class
+com\cinesync\ticketing\adapter\out\rabbitmq\RabbitEventPublisher.class
+com\cinesync\ticketing\adapter\out\repository\UserContactJpaRepository.class
+com\cinesync\ticketing\adapter\out\repository\InboxEventJpaRepository.class
+com\cinesync\ticketing\adapter\in\rabbitmq\TicketingCommandService.class
+com\cinesync\ticketing\adapter\out\pdf\ITextPdfGenerator.class
+com\cinesync\ticketing\adapter\out\repository\TicketingFulfillmentJpaRepository.class
+com\cinesync\ticketing\adapter\out\smtp\SmtpEmailSender.class
+com\cinesync\ticketing\adapter\in\rabbitmq\UserEventConsumer.class

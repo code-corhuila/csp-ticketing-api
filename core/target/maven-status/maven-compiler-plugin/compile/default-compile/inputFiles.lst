@@ -1,0 +1,14 @@
+C:\Users\nicol\OneDrive\Desktop\ticketing-api\csp-ticketing-api\core\src\main\java\com\cinesync\ticketing\core\model\InboxEvent.java
+C:\Users\nicol\OneDrive\Desktop\ticketing-api\csp-ticketing-api\core\src\main\java\com\cinesync\ticketing\core\model\Ticket.java
+C:\Users\nicol\OneDrive\Desktop\ticketing-api\csp-ticketing-api\core\src\main\java\com\cinesync\ticketing\core\model\TicketingFulfillment.java
+C:\Users\nicol\OneDrive\Desktop\ticketing-api\csp-ticketing-api\core\src\main\java\com\cinesync\ticketing\core\model\UserContact.java
+C:\Users\nicol\OneDrive\Desktop\ticketing-api\csp-ticketing-api\core\src\main\java\com\cinesync\ticketing\core\port\in\NotificationQueryUseCase.java
+C:\Users\nicol\OneDrive\Desktop\ticketing-api\csp-ticketing-api\core\src\main\java\com\cinesync\ticketing\core\port\in\TicketingCommandUseCase.java
+C:\Users\nicol\OneDrive\Desktop\ticketing-api\csp-ticketing-api\core\src\main\java\com\cinesync\ticketing\core\port\in\TicketQueryUseCase.java
+C:\Users\nicol\OneDrive\Desktop\ticketing-api\csp-ticketing-api\core\src\main\java\com\cinesync\ticketing\core\port\out\EmailSenderPort.java
+C:\Users\nicol\OneDrive\Desktop\ticketing-api\csp-ticketing-api\core\src\main\java\com\cinesync\ticketing\core\port\out\EventPublisherPort.java
+C:\Users\nicol\OneDrive\Desktop\ticketing-api\csp-ticketing-api\core\src\main\java\com\cinesync\ticketing\core\port\out\InboxEventRepository.java
+C:\Users\nicol\OneDrive\Desktop\ticketing-api\csp-ticketing-api\core\src\main\java\com\cinesync\ticketing\core\port\out\PdfGeneratorPort.java
+C:\Users\nicol\OneDrive\Desktop\ticketing-api\csp-ticketing-api\core\src\main\java\com\cinesync\ticketing\core\port\out\TicketingFulfillmentRepository.java
+C:\Users\nicol\OneDrive\Desktop\ticketing-api\csp-ticketing-api\core\src\main\java\com\cinesync\ticketing\core\port\out\TicketRepository.java
+C:\Users\nicol\OneDrive\Desktop\ticketing-api\csp-ticketing-api\core\src\main\java\com\cinesync\ticketing\core\port\out\UserContactRepository.java

@@ -1,0 +1,9 @@
+C:\Users\nicol\OneDrive\Desktop\ticketing-api\csp-ticketing-api\adapters\src\main\java\com\cinesync\ticketing\adapter\in\rabbitmq\TicketingCommandService.java
+C:\Users\nicol\OneDrive\Desktop\ticketing-api\csp-ticketing-api\adapters\src\main\java\com\cinesync\ticketing\adapter\in\rabbitmq\UserEventConsumer.java
+C:\Users\nicol\OneDrive\Desktop\ticketing-api\csp-ticketing-api\adapters\src\main\java\com\cinesync\ticketing\adapter\out\pdf\ITextPdfGenerator.java
+C:\Users\nicol\OneDrive\Desktop\ticketing-api\csp-ticketing-api\adapters\src\main\java\com\cinesync\ticketing\adapter\out\rabbitmq\RabbitEventPublisher.java
+C:\Users\nicol\OneDrive\Desktop\ticketing-api\csp-ticketing-api\adapters\src\main\java\com\cinesync\ticketing\adapter\out\repository\InboxEventJpaRepository.java
+C:\Users\nicol\OneDrive\Desktop\ticketing-api\csp-ticketing-api\adapters\src\main\java\com\cinesync\ticketing\adapter\out\repository\TicketingFulfillmentJpaRepository.java
+C:\Users\nicol\OneDrive\Desktop\ticketing-api\csp-ticketing-api\adapters\src\main\java\com\cinesync\ticketing\adapter\out\repository\TicketJpaRepository.java
+C:\Users\nicol\OneDrive\Desktop\ticketing-api\csp-ticketing-api\adapters\src\main\java\com\cinesync\ticketing\adapter\out\repository\UserContactJpaRepository.java
+C:\Users\nicol\OneDrive\Desktop\ticketing-api\csp-ticketing-api\adapters\src\main\java\com\cinesync\ticketing\adapter\out\smtp\SmtpEmailSender.java
