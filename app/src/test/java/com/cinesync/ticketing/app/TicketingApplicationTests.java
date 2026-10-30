@@ -21,28 +21,30 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 /**
  * The application as it is deployed: every bean of the real configuration, on a real PostgreSQL with the schema and a real
  * RabbitMQ. It is the test that fails when a controller needs a bean nobody provides, which stopped the service from starting
- * in {@code develop}. The security filters are left out here: the token checks have their own tests. Bean overriding is allowed
- * because the configuration of the integration tests sits in the scanned package and defines the same repositories.
+ * in {@code develop}. The security filters are left out here: the token checks have their own tests. The schema is the one of
+ * the migrations of {@code csp-ticketing-db}.
  */
-@SpringBootTest(properties = "spring.main.allow-bean-definition-overriding=true")
+@SpringBootTest
 @AutoConfigureMockMvc(addFilters = false)
 class TicketingApplicationTests {
 
     @ServiceConnection
     static final PostgreSQLContainer<?> postgres = new PostgreSQLContainer<>("postgres:16-alpine")
-            .withInitScript("ticketing-schema.sql");
+            .withUsername("postgres").withPassword("postgres");
 
     @ServiceConnection
     static final RabbitMQContainer rabbitMQ = new RabbitMQContainer("rabbitmq:3.13-management");
 
     static {
         postgres.start();
+        TicketingSchema.migrate(postgres);
         rabbitMQ.start();
     }
 
     @DynamicPropertySource
     static void serviceSettings(DynamicPropertyRegistry registry) {
         // The reader account is required at start; nothing is stored in these tests, so any value does.
+        registry.add("spring.flyway.enabled", () -> "false");
         registry.add("ticketing.object-storage.url", () -> "http://127.0.0.1:1");
         registry.add("ticketing.object-storage.access-key", () -> "test-reader");
         registry.add("ticketing.object-storage.secret-key", () -> "test-reader-secret");

@@ -65,3 +65,5 @@ mvn -B verify
 ```
 
 The integration tests use Testcontainers (PostgreSQL 16 and RabbitMQ 3.13), so Docker must be running.
+
+The tests apply the migrations of `csp-ticketing-db` (Flyway, same settings as that repository), so clone it next to this one (`../csp-ticketing-db`) or pass `-Dticketing.db.dir=<path to its sql folder>`; the build fails with that message if the folder is missing.
