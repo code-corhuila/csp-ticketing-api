@@ -80,7 +80,8 @@ public class TicketDeliveryService implements TicketDeliveryUseCase {
     @Override
     @Transactional
     public void registerPdf(UUID ticketId, String pdfUrl, String correlationId) {
-        Ticket ticket = ticketRepository.findById(ticketId).orElseThrow(() -> new TicketNotFoundException(ticketId));
+        // Locked, so two reports of the same PDF cannot both see it missing and write two TicketIssued rows.
+        Ticket ticket = ticketRepository.findByIdForUpdate(ticketId).orElseThrow(() -> new TicketNotFoundException(ticketId));
         if (!ticket.attachPdf(pdfUrl)) {
             log.info("PDF already registered for ticketId: {}", ticketId);
             return;
