@@ -1,11 +1,9 @@
 package com.cinesync.ticketing.app.config;
 
 import com.cinesync.ticketing.core.port.out.EmailSenderPort;
-import com.cinesync.ticketing.core.port.out.EventPublisherPort;
 import com.cinesync.ticketing.core.port.out.PdfGeneratorPort;
 import com.cinesync.ticketing.adapter.out.smtp.SmtpEmailSender;
 import com.cinesync.ticketing.adapter.out.pdf.ITextPdfGenerator;
-import com.cinesync.ticketing.adapter.out.rabbitmq.RabbitEventPublisher;
 import org.springframework.amqp.AmqpRejectAndDontRequeueException;
 import org.springframework.amqp.core.Binding;
 import org.springframework.amqp.core.BindingBuilder;
@@ -30,6 +28,7 @@ import org.springframework.retry.policy.SimpleRetryPolicy;
 import org.springframework.util.backoff.ExponentialBackOff;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import java.time.Clock;
 import java.util.Map;
 import java.util.Properties;
 
@@ -73,8 +72,8 @@ public class TicketingConfiguration {
 
     @Bean
     @ConditionalOnMissingBean
-    public EventPublisherPort eventPublisherPort(RabbitTemplate rabbitTemplate, ObjectMapper objectMapper) {
-        return new RabbitEventPublisher(rabbitTemplate, objectMapper);
+    public Clock clock() {
+        return Clock.systemUTC();
     }
 
     @Bean

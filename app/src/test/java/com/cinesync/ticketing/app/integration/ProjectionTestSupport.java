@@ -2,6 +2,7 @@ package com.cinesync.ticketing.app.integration;
 
 import com.cinesync.ticketing.adapter.in.rabbitmq.TicketingCommandService;
 import com.cinesync.ticketing.adapter.in.rabbitmq.UserEventConsumer;
+import com.cinesync.ticketing.adapter.service.TicketDeliveryService;
 import com.cinesync.ticketing.adapter.out.repository.UserContactJpaRepository;
 import com.cinesync.ticketing.app.config.ConsumerLifecycleListener;
 import com.cinesync.ticketing.app.config.ConsumerReadinessIndicator;
@@ -31,8 +32,8 @@ import java.util.UUID;
 
 /**
  * Real RabbitMQ and PostgreSQL plus the consumers of the service: the listeners, the command service, the
- * repositories and the RabbitMQ topology. Nothing is mocked. Events are published the way the csp-worker relay publishes them:
- * exchange cine.events, Auth routing keys, application/json.
+ * repositories and the RabbitMQ topology. Nothing is mocked. Events are published the way the
+ * csp-worker relay publishes them: exchange cine.events, application/json.
  *
  * <p>The containers are started once and shared, and every subclass uses this same Spring context, so there
  * is never a second set of consumers competing for the same queues.
@@ -45,7 +46,7 @@ abstract class ProjectionTestSupport {
     @EntityScan(basePackageClasses = UserContact.class)
     @EnableJpaRepositories(basePackageClasses = UserContactJpaRepository.class)
     @Import({TicketingConfiguration.class, UserEventConsumer.class, TicketingCommandService.class,
-            ConsumerReadinessIndicator.class, ConsumerLifecycleListener.class})
+            TicketDeliveryService.class, ConsumerReadinessIndicator.class, ConsumerLifecycleListener.class})
     static class ProjectionApp {
     }
 

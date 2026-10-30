@@ -1,43 +1,64 @@
 package com.cinesync.ticketing.app.rest.internal;
 
-import com.cinesync.ticketing.core.model.Ticket;
-import com.cinesync.ticketing.core.model.TicketingFulfillment;
-import com.cinesync.ticketing.core.port.in.TicketingCommandUseCase;
-import com.cinesync.ticketing.core.port.out.TicketRepository;
-import com.cinesync.ticketing.core.port.out.TicketingFulfillmentRepository;
+import com.cinesync.ticketing.core.model.TicketNotFoundException;
+import com.cinesync.ticketing.core.port.in.TicketDeliveryUseCase;
 import lombok.RequiredArgsConstructor;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.List;
 import java.util.UUID;
 
+/**
+ * Operations for csp-worker (ADR-057). Callers are not authenticated yet: the service-token check of
+ * norm 5.3.7 is csp-ticketing-api#12.
+ */
 @RestController
-@RequestMapping("/internal/tickets")
+@RequestMapping("/internal")
 @RequiredArgsConstructor
 public class TicketingInternalController {
 
-    private final TicketRepository ticketRepository;
-    private final TicketingFulfillmentRepository fulfillmentRepository;
+    private static final int MAX_PDF_URL_LENGTH = 500;
 
-    @PostMapping("/{ticketId}/pdf")
+    private final TicketDeliveryUseCase deliveryUseCase;
+
+    @PostMapping("/tickets/{ticketId}/pdf")
     public ResponseEntity<Void> receivePdfUrl(
-            @PathVariable UUID ticketId,
+            @PathVariable("ticketId") UUID ticketId,
+            @RequestHeader(name = "X-Correlation-Id", required = false) String correlationId,
             @RequestBody PdfUrlRequest request) {
-
-        Ticket ticket = ticketRepository.findById(ticketId)
-                .orElseThrow(() -> new IllegalArgumentException("Ticket not found: " + ticketId));
-
-        ticket.setPdfUrl(request.pdfUrl());
-        ticketRepository.save(ticket);
-
-        fulfillmentRepository.findByTicketId(ticketId).ifPresent(fulfillment -> {
-            fulfillment.setStatus(TicketingFulfillment.FulfillmentStatus.SENT);
-            fulfillment.setLastError(null);
-            // fulfillmentRepository.save(fulfillment); // handled by transaction
-        });
-
+        if (request.pdfUrl() == null || request.pdfUrl().isBlank() || request.pdfUrl().length() > MAX_PDF_URL_LENGTH) {
+            throw new InvalidRequestException("pdfUrl is required and at most " + MAX_PDF_URL_LENGTH + " characters");
+        }
+        deliveryUseCase.registerPdf(ticketId, request.pdfUrl(),
+                correlationId == null || correlationId.isBlank() ? UUID.randomUUID().toString() : correlationId);
         return ResponseEntity.ok().build();
     }
 
+    @ExceptionHandler(TicketNotFoundException.class)
+    ResponseEntity<ErrorResponse> notFound(TicketNotFoundException e) {
+        return error(HttpStatus.NOT_FOUND, "TICKET_NOT_FOUND", e.getMessage());
+    }
+
+    @ExceptionHandler(InvalidRequestException.class)
+    ResponseEntity<ErrorResponse> invalid(InvalidRequestException e) {
+        return error(HttpStatus.BAD_REQUEST, "INVALID_REQUEST", e.getMessage());
+    }
+
+    private static ResponseEntity<ErrorResponse> error(HttpStatus status, String code, String message) {
+        return ResponseEntity.status(status)
+                .body(new ErrorResponse(code, message, List.of(), UUID.randomUUID().toString()));
+    }
+
     public record PdfUrlRequest(String pdfUrl) {}
+
+    static class InvalidRequestException extends RuntimeException {
+        InvalidRequestException(String message) {
+            super(message);
+        }
+    }
+
+    /** The single error envelope of the platform. */
+    public record ErrorResponse(String error, String message, List<String> details, String traceId) {}
 }
