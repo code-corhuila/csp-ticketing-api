@@ -14,8 +14,8 @@ import java.util.List;
 import java.util.UUID;
 
 /**
- * Operations for csp-worker (ADR-057). Callers are not authenticated yet: the service-token check of
- * norm 5.3.7 is csp-ticketing-api#12.
+ * Operations for csp-worker (ADR-057). They take only a service credential whose subject is in {@code SERVICE_SUBJECTS}
+ * (ADR-056, checked in {@code SecurityConfiguration}).
  */
 @RestController
 @RequestMapping("/internal")

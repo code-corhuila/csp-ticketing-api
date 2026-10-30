@@ -92,6 +92,9 @@ ticketing:
   jwt:
     public-key: ${JWT_PUBLIC_KEY:}
     public-key-file: ${JWT_PUBLIC_KEY_FILE:}
+  # The subjects of the service credentials that may call the internal operations (ADR-056): csp-worker.
+  security:
+    service-subjects: ${SERVICE_SUBJECTS:csp-worker}
 
 management:
   endpoints:
