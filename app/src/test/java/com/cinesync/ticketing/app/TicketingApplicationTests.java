@@ -11,6 +11,9 @@ import org.springframework.test.web.servlet.MockMvc;
 import org.testcontainers.containers.PostgreSQLContainer;
 import org.testcontainers.containers.RabbitMQContainer;
 
+import java.security.KeyPairGenerator;
+import java.util.Base64;
+
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -43,6 +46,19 @@ class TicketingApplicationTests {
         registry.add("ticketing.object-storage.url", () -> "http://127.0.0.1:1");
         registry.add("ticketing.object-storage.access-key", () -> "test-reader");
         registry.add("ticketing.object-storage.secret-key", () -> "test-reader-secret");
+        registry.add("ticketing.jwt.public-key", TicketingApplicationTests::aPublicKey);
+    }
+
+    /** The service needs a public key to start; no token is checked in this test, so any RSA key does. */
+    private static String aPublicKey() {
+        try {
+            KeyPairGenerator generator = KeyPairGenerator.getInstance("RSA");
+            generator.initialize(2048);
+            return "-----BEGIN PUBLIC KEY-----\n" + Base64.getEncoder().encodeToString(generator.generateKeyPair().getPublic().getEncoded())
+                    + "\n-----END PUBLIC KEY-----";
+        } catch (Exception e) {
+            throw new IllegalStateException(e);
+        }
     }
 
     @Autowired
