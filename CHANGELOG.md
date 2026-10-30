@@ -3,11 +3,13 @@
 ## [Unreleased]
 
 ### Added
+- HU-TICKETING-002 (ADR-057): `GET /internal/tickets/awaiting-pdf?limit=` (1 to 100, default 50) lists the tickets whose document is still to be rendered, oldest first, with what the worker needs: ticket and reservation ids, movie, room, start time, seats, concessions and the QR payload. A ticket is offered only after `ticketing.pdf.min-age-seconds` (60 by default), so the concession order that follows the booking reaches it before the document is rendered.
 - HU-TICKETING-002 (ADR-057): `POST /internal/tickets/{ticketId}/pdf` records the PDF URL the worker reports and writes `TicketIssued` to the `outbox_event` table in the same transaction, once per ticket; the csp-worker relay publishes it. Requires `csp-ticketing-db` V007.
 - HU-TICKETING-002 (ADR-057): `POST /internal/fulfillments/dispatch?limit=` (1 to 100, default 50) sends the emails of the due pending deliveries whose ticket has its PDF: it resolves the contact by `user_id`, keeps the delivery `PENDING` with a growing delay (1 and 5 minutes) when the contact is missing or the email fails, and marks it `FAILED` after 3 attempts.
 - The email carries the ticket details and a link to the PDF, not the file. Values from other services are HTML-escaped.
 
 ### Changed
+- The `ObjectMapper` writes dates as RFC 3339 text and understands `java.time`; the plain one of the configuration could not serialize an `Instant`.
 - The internal routes answer with the platform error envelope (`error`, `message`, `details`, `traceId`). They are still not authenticated: the service-token check is `csp-ticketing-api#12`.
 
 ### Removed

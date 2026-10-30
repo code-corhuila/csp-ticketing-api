@@ -7,6 +7,7 @@ import com.cinesync.ticketing.core.model.TicketingFulfillment.FulfillmentStatus;
 import com.cinesync.ticketing.core.model.UserContact;
 import com.cinesync.ticketing.core.port.in.TicketDeliveryUseCase;
 import com.cinesync.ticketing.core.port.in.TicketDeliveryUseCase.DispatchResult;
+import com.cinesync.ticketing.core.port.in.TicketToRender;
 import com.cinesync.ticketing.core.port.out.EmailSenderPort;
 import com.cinesync.ticketing.core.port.out.TicketRepository;
 import com.cinesync.ticketing.core.port.out.TicketingFulfillmentRepository;
@@ -189,6 +190,54 @@ class TicketDeliveryTest extends ProjectionTestSupport {
         assertThat(reloaded.getStatus()).isEqualTo(FulfillmentStatus.PENDING);
         assertThat(reloaded.getAttempts()).isEqualTo(1);
         assertThat(reloaded.getLastError()).contains("IllegalStateException");
+    }
+
+    private void age(Ticket ticket, int seconds) {
+        jdbc.update("UPDATE ticketing_fulfillment.tickets SET created_at = now() - make_interval(secs => ?) WHERE id = ?",
+                seconds, ticket.getId());
+    }
+
+    @Test
+    void awaitingPdf_listsTheOldEnoughTicketsWithoutPdfOldestFirstWithWhatTheDocumentNeeds() {
+        Ticket older = ticket(UUID.randomUUID(), null);
+        Ticket old = tickets.save(Ticket.builder().userId(UUID.randomUUID()).reservationId(UUID.randomUUID())
+                .showtimeId(UUID.randomUUID()).movieTitleSnapshot("Another Movie").roomNameSnapshot("Room 2")
+                .showtimeStartsAt(Instant.parse("2026-11-01T20:00:00Z")).seatLabelsSnapshot(List.of("B1", "B2"))
+                .concessionsSnapshot(List.of(Ticket.ConcessionItem.builder().name("Popcorn").quantity(2)
+                        .unitPriceCents(500).build()))
+                .qrPayload("CSP-old").build());
+        Ticket fresh = ticket(UUID.randomUUID(), null);
+        Ticket withPdf = ticket(UUID.randomUUID(), PDF_URL);
+        age(older, 300);
+        age(old, 120);
+        age(withPdf, 300);
+
+        List<TicketToRender> awaiting = delivery.awaitingPdf(10);
+
+        assertThat(awaiting).extracting(TicketToRender::ticketId).containsExactly(older.getId(), old.getId());
+        TicketToRender data = awaiting.get(1);
+        assertThat(data.reservationId()).isEqualTo(old.getReservationId());
+        assertThat(data.movieTitle()).isEqualTo("Another Movie");
+        assertThat(data.roomName()).isEqualTo("Room 2");
+        assertThat(data.showtimeStartsAt()).isEqualTo(Instant.parse("2026-11-01T20:00:00Z"));
+        assertThat(data.seatNumbers()).containsExactly("B1", "B2");
+        assertThat(data.qrPayload()).isEqualTo("CSP-old");
+        assertThat(data.concessions()).singleElement().satisfies(item -> {
+            assertThat(item.name()).isEqualTo("Popcorn");
+            assertThat(item.quantity()).isEqualTo(2);
+            assertThat(item.unitPriceCents()).isEqualTo(500);
+        });
+        assertThat(awaiting.get(0).concessions()).isEmpty();
+        assertThat(awaiting).extracting(TicketToRender::ticketId).doesNotContain(fresh.getId(), withPdf.getId());
+    }
+
+    @Test
+    void awaitingPdf_returnsAtMostTheLimit() {
+        age(ticket(UUID.randomUUID(), null), 300);
+        age(ticket(UUID.randomUUID(), null), 200);
+        age(ticket(UUID.randomUUID(), null), 100);
+
+        assertThat(delivery.awaitingPdf(2)).hasSize(2);
     }
 
     private void makeDue(TicketingFulfillment fulfillment) {
