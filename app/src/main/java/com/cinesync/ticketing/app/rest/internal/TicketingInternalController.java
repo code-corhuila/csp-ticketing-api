@@ -3,6 +3,7 @@ package com.cinesync.ticketing.app.rest.internal;
 import com.cinesync.ticketing.core.model.TicketNotFoundException;
 import com.cinesync.ticketing.core.port.in.TicketDeliveryUseCase;
 import com.cinesync.ticketing.core.port.in.TicketDeliveryUseCase.DispatchResult;
+import com.cinesync.ticketing.core.port.in.TicketToRender;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -39,6 +40,14 @@ public class TicketingInternalController {
         return ResponseEntity.ok().build();
     }
 
+    @GetMapping("/tickets/awaiting-pdf")
+    public AwaitingPdfResponse awaitingPdf(@RequestParam(name = "limit", defaultValue = "" + DEFAULT_LIMIT) int limit) {
+        if (limit < 1 || limit > MAX_LIMIT) {
+            throw new InvalidRequestException("limit must be between 1 and " + MAX_LIMIT);
+        }
+        return new AwaitingPdfResponse(deliveryUseCase.awaitingPdf(limit));
+    }
+
     @PostMapping("/fulfillments/dispatch")
     public DispatchResult dispatch(@RequestParam(name = "limit", defaultValue = "" + DEFAULT_LIMIT) int limit) {
         if (limit < 1 || limit > MAX_LIMIT) {
@@ -63,6 +72,8 @@ public class TicketingInternalController {
     }
 
     public record PdfUrlRequest(String pdfUrl) {}
+
+    public record AwaitingPdfResponse(List<TicketToRender> data) {}
 
     static class InvalidRequestException extends RuntimeException {
         InvalidRequestException(String message) {

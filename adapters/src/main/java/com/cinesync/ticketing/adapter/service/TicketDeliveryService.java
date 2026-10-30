@@ -7,6 +7,7 @@ import com.cinesync.ticketing.core.model.TicketNotFoundException;
 import com.cinesync.ticketing.core.model.TicketingFulfillment;
 import com.cinesync.ticketing.core.model.UserContact;
 import com.cinesync.ticketing.core.port.in.TicketDeliveryUseCase;
+import com.cinesync.ticketing.core.port.in.TicketToRender;
 import com.cinesync.ticketing.core.port.out.EmailSenderPort;
 import com.cinesync.ticketing.core.port.out.OutboxRepository;
 import com.cinesync.ticketing.core.port.out.TicketRepository;
@@ -16,6 +17,7 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.annotation.Transactional;
@@ -23,6 +25,7 @@ import org.springframework.transaction.support.TransactionTemplate;
 
 import java.time.Clock;
 import java.time.Instant;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
@@ -46,6 +49,29 @@ public class TicketDeliveryService implements TicketDeliveryUseCase {
     private final ObjectMapper objectMapper;
     private final Clock clock;
     private final PlatformTransactionManager transactionManager;
+
+    /** How long a ticket waits before its document is rendered, for the concession order to reach it. */
+    @Value("${ticketing.pdf.min-age-seconds:60}")
+    private long minAgeSeconds;
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<TicketToRender> awaitingPdf(int limit) {
+        return ticketRepository.findAwaitingPdf(clock.instant().minusSeconds(minAgeSeconds), limit).stream()
+                .map(ticket -> new TicketToRender(ticket.getId(), ticket.getReservationId(),
+                        ticket.getMovieTitleSnapshot(), ticket.getRoomNameSnapshot(), ticket.getShowtimeStartsAt(),
+                        ticket.getSeatLabelsSnapshot(), concessionsOf(ticket), ticket.getQrPayload()))
+                .toList();
+    }
+
+    private static List<TicketToRender.Concession> concessionsOf(Ticket ticket) {
+        if (ticket.getConcessionsSnapshot() == null) {
+            return List.of();
+        }
+        return ticket.getConcessionsSnapshot().stream()
+                .map(item -> new TicketToRender.Concession(item.getName(), item.getQuantity(), item.getUnitPriceCents()))
+                .toList();
+    }
 
     @Override
     @Transactional
