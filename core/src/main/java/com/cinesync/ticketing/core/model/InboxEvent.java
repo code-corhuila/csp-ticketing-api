@@ -29,15 +29,4 @@ public class InboxEvent {
 
     @Column(name = "error", length = 1000)
     private String error;
-
-    public static InboxEvent of(UUID eventId, String eventType) {
-        return InboxEvent.builder()
-                .eventId(eventId)
-                .eventType(eventType)
-                .build();
-    }
-
-    public void markFailed(String error) {
-        this.error = error;
-    }
 }
