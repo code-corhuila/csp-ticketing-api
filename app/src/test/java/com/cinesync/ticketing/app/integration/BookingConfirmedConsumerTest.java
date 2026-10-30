@@ -61,6 +61,21 @@ class BookingConfirmedConsumerTest extends ProjectionTestSupport {
                 """.formatted(UUID.randomUUID(), reservationId, reservationId, UUID.randomUUID());
     }
 
+    /** The payload csp-concessions-api publishes (OrderService.event): every field of the order and of each line. */
+    private static String fullConcessionOrderConfirmed(UUID eventId, UUID reservationId, int unitPrice) {
+        UUID orderId = UUID.randomUUID();
+        return """
+                {"eventId":"%s","eventType":"ConcessionOrderConfirmed","occurredAt":"2026-10-30T15:00:00Z",
+                 "version":1,"source":"concessions-service","aggregateId":"%s",
+                 "payload":{"orderId":"%s","userId":"%s","reservationId":"%s","status":"CONFIRMED","totalAmount":%d,
+                            "items":[{"itemType":"PRODUCT","itemId":"%s","itemName":"Popcorn","unitPrice":%d,"quantity":2},
+                                     {"itemType":"COMBO","itemId":"%s","itemName":"Family combo","unitPrice":1500,"quantity":1}],
+                            "heldProducts":[{"productId":"%s","quantity":2}]},
+                 "metadata":{"correlationId":"%s"}}
+                """.formatted(eventId, orderId, orderId, UUID.randomUUID(), reservationId, unitPrice * 2 + 1500,
+                UUID.randomUUID(), unitPrice, UUID.randomUUID(), UUID.randomUUID(), UUID.randomUUID());
+    }
+
     private Ticket awaitTicket(UUID reservationId) {
         await().atMost(15, TimeUnit.SECONDS).until(() -> tickets.findByReservationId(reservationId).isPresent());
         return tickets.findByReservationId(reservationId).orElseThrow();
@@ -147,6 +162,49 @@ class BookingConfirmedConsumerTest extends ProjectionTestSupport {
 
         await().atMost(15, TimeUnit.SECONDS).untilAsserted(() -> assertThat(
                 tickets.findByReservationId(reservationId).orElseThrow().getConcessionsSnapshot()).hasSize(1));
+    }
+
+    @Test
+    void fullConcessionPayload_storesNamePriceAndQuantityOfEveryLine() {
+        UUID reservationId = UUID.randomUUID();
+        publish(BOOKING_KEY, bookingConfirmed(UUID.randomUUID(), reservationId, UUID.randomUUID(), "null"));
+        awaitTicket(reservationId);
+
+        publish(CONCESSION_KEY, fullConcessionOrderConfirmed(UUID.randomUUID(), reservationId, 500));
+
+        await().atMost(15, TimeUnit.SECONDS).untilAsserted(() -> assertThat(
+                tickets.findByReservationId(reservationId).orElseThrow().getConcessionsSnapshot()).hasSize(2));
+        assertThat(tickets.findByReservationId(reservationId).orElseThrow().getConcessionsSnapshot()).satisfiesExactly(
+                popcorn -> {
+                    assertThat(popcorn.getName()).isEqualTo("Popcorn");
+                    assertThat(popcorn.getQuantity()).isEqualTo(2);
+                    assertThat(popcorn.getUnitPriceCents()).isEqualTo(500L);
+                },
+                combo -> {
+                    assertThat(combo.getName()).isEqualTo("Family combo");
+                    assertThat(combo.getQuantity()).isEqualTo(1);
+                    assertThat(combo.getUnitPriceCents()).isEqualTo(1500L);
+                });
+    }
+
+    @Test
+    void concessionOrderRedeliveredWithTheSameEventId_changesNothing() {
+        UUID reservationId = UUID.randomUUID();
+        UUID eventId = UUID.randomUUID();
+        publish(BOOKING_KEY, bookingConfirmed(UUID.randomUUID(), reservationId, UUID.randomUUID(), "null"));
+        awaitTicket(reservationId);
+        publish(CONCESSION_KEY, fullConcessionOrderConfirmed(eventId, reservationId, 500));
+        await().atMost(15, TimeUnit.SECONDS).until(() -> inbox.findByEventId(eventId).isPresent());
+
+        // The same eventId with another price: a duplicate is acknowledged and must not overwrite what was stored.
+        publish(CONCESSION_KEY, fullConcessionOrderConfirmed(eventId, reservationId, 999));
+        UUID barrier = UUID.randomUUID();
+        publish(BOOKING_KEY, bookingConfirmed(barrier, UUID.randomUUID(), UUID.randomUUID(), "null"));
+        await().atMost(15, TimeUnit.SECONDS).until(() -> inbox.findByEventId(barrier).isPresent());
+
+        assertThat(tickets.findByReservationId(reservationId).orElseThrow().getConcessionsSnapshot())
+                .extracting(Ticket.ConcessionItem::getUnitPriceCents).containsExactly(500L, 1500L);
+        assertThat(rabbitTemplate.receive("cine.ticketing_fulfillment.concession-order-confirmed.dlq", 500)).isNull();
     }
 
     @Test
