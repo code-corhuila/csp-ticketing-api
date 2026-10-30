@@ -12,6 +12,6 @@ public interface TicketingCommandUseCase {
     void handleBookingConfirmed(UUID reservationId, UUID userId, UUID showtimeId,
                                  String movieTitle, String roomName, String showtimeStartsAt,
                                  String seatNumbersJson, String correlationId);
-    void handleConcessionOrderConfirmed(UUID reservationId, String itemsJson);
+    void handleConcessionOrderConfirmed(UUID reservationId, String itemsJson, String eventId, String correlationId);
     Ticket getOrCreateTicketForReservation(UUID reservationId);
 }

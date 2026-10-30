@@ -75,7 +75,7 @@ public class UserEventConsumer {
     @RabbitListener(queues = "${ticketing.rabbitmq.queue.concession-order-confirmed}")
     @Transactional
     public void onConcessionOrderConfirmed(String message) {
-        processEventSimple(message, "ConcessionOrderConfirmed", payload -> {
+        processEvent(message, "ConcessionOrderConfirmed", (payload, root) -> {
             UUID reservationId = UUID.fromString(payload.get("reservationId").asText());
             String itemsJson;
             try {
@@ -83,7 +83,9 @@ public class UserEventConsumer {
             } catch (com.fasterxml.jackson.core.JsonProcessingException e) {
                 throw new RuntimeException("Invalid items JSON", e);
             }
-            commandUseCase.handleConcessionOrderConfirmed(reservationId, itemsJson);
+            String eventId = root.get("eventId").asText();
+            String correlationId = root.path("metadata").path("correlationId").asText(null);
+            commandUseCase.handleConcessionOrderConfirmed(reservationId, itemsJson, eventId, correlationId);
         });
     }
 
