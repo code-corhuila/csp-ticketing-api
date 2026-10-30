@@ -66,6 +66,7 @@ public class TicketingCommandService implements TicketingCommandUseCase {
     public void handleBookingConfirmed(BookingConfirmation booking, String correlationId) {
         UUID reservationId = booking.reservationId();
         log.info("Processing BookingConfirmed: reservationId={}, correlationId={}", reservationId, correlationId);
+        ticketRepository.lockReservation(reservationId);
 
         if (ticketRepository.findByReservationId(reservationId).isPresent()) {
             log.info("Ticket already exists for reservationId: {}", reservationId);
@@ -115,6 +116,7 @@ public class TicketingCommandService implements TicketingCommandUseCase {
     @Transactional
     public void handleConcessionOrderConfirmed(UUID reservationId, String itemsJson, String eventId, String correlationId) {
         log.info("Processing ConcessionOrderConfirmed: reservationId={}, eventId={}, correlationId={}", reservationId, eventId, correlationId);
+        ticketRepository.lockReservation(reservationId);
 
         try {
             List<Ticket.ConcessionItem> items = parseConcessionItems(itemsJson);

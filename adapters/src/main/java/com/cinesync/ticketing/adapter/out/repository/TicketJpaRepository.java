@@ -31,4 +31,13 @@ public interface TicketJpaRepository extends JpaRepository<Ticket, UUID>, Ticket
     @Modifying
     @Query("UPDATE Ticket t SET t.concessionsSnapshot = :items, t.updatedAt = CURRENT_TIMESTAMP WHERE t.reservationId = :reservationId AND t.concessionsSnapshot IS NULL")
     int updateConcessionsSnapshotByReservationId(@Param("reservationId") UUID reservationId, @Param("items") List<Ticket.ConcessionItem> items);
+
+    /** The result is cast because the function returns void, which the JDBC mapping of the query cannot read. */
+    @Query(value = "SELECT CAST(pg_advisory_xact_lock(hashtextextended(:reservationId, 0)) AS text)", nativeQuery = true)
+    String acquireReservationLock(@Param("reservationId") String reservationId);
+
+    @Override
+    default void lockReservation(UUID reservationId) {
+        acquireReservationLock(reservationId.toString());
+    }
 }

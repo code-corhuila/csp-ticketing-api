@@ -14,4 +14,10 @@ public interface TicketRepository {
     /** Tickets created before the given instant that have no PDF yet, oldest first. */
     List<Ticket> findAwaitingPdf(Instant createdBefore, int limit);
     int updateConcessionsSnapshotByReservationId(UUID reservationId, List<Ticket.ConcessionItem> items);
+    /**
+     * Serializes the transactions that handle the same reservation, until the current one ends. The booking and the
+     * concession order of a reservation are consumed at the same time and each one looks for what the other stores, so
+     * without it both can miss it and the ticket is left without its concessions. Must run inside a transaction.
+     */
+    void lockReservation(UUID reservationId);
 }
