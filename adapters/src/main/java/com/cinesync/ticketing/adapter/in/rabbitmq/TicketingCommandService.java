@@ -38,29 +38,28 @@ public class TicketingCommandService implements TicketingCommandUseCase {
     @Override
     @Transactional
     public void handleUserRegistered(UUID userId, String email, Instant occurredAt) {
-        log.info("Processing UserRegistered: userId={}, email={}, occurredAt={}", userId, email, occurredAt);
-        UserContact contact = userContactRepository.findByUserId(userId)
-                .orElseGet(() -> UserContact.builder()
-                        .userId(userId)
-                        .email(email)
-                        .lastUpdatedAt(occurredAt)
-                        .build());
-        contact.updateEmail(email, occurredAt);
-        userContactRepository.save(contact);
+        log.info("Processing UserRegistered: userId={}, occurredAt={}", userId, occurredAt);
+        upsertContact(userId, email, occurredAt);
     }
 
     @Override
     @Transactional
     public void handleUserEmailChanged(UUID userId, String email, Instant occurredAt) {
-        log.info("Processing UserEmailChanged: userId={}, email={}, occurredAt={}", userId, email, occurredAt);
-        UserContact contact = userContactRepository.findByUserId(userId)
-                .orElseGet(() -> UserContact.builder()
-                        .userId(userId)
-                        .email(email)
-                        .lastUpdatedAt(occurredAt)
-                        .build());
-        contact.updateEmail(email, occurredAt);
-        userContactRepository.save(contact);
+        log.info("Processing UserEmailChanged: userId={}, occurredAt={}", userId, occurredAt);
+        upsertContact(userId, email, occurredAt);
+    }
+
+    // Either event can be the first one seen for a user, so both are an upsert by userId.
+    private void upsertContact(UUID userId, String email, Instant occurredAt) {
+        userContactRepository.findByUserId(userId).ifPresentOrElse(
+                contact -> {
+                    if (contact.applyChange(email, occurredAt)) {
+                        userContactRepository.save(contact);
+                    } else {
+                        log.info("Ignoring stale contact event: userId={}, occurredAt={}", userId, occurredAt);
+                    }
+                },
+                () -> userContactRepository.save(UserContact.of(userId, email, occurredAt)));
     }
 
     @Override

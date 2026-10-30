@@ -6,6 +6,7 @@ import com.cinesync.ticketing.core.port.out.PdfGeneratorPort;
 import com.cinesync.ticketing.adapter.out.smtp.SmtpEmailSender;
 import com.cinesync.ticketing.adapter.out.pdf.ITextPdfGenerator;
 import com.cinesync.ticketing.adapter.out.rabbitmq.RabbitEventPublisher;
+import org.springframework.amqp.AmqpRejectAndDontRequeueException;
 import org.springframework.amqp.core.Binding;
 import org.springframework.amqp.core.BindingBuilder;
 import org.springframework.amqp.core.Declarables;
@@ -16,25 +17,25 @@ import org.springframework.amqp.rabbit.config.SimpleRabbitListenerContainerFacto
 import org.springframework.amqp.rabbit.connection.ConnectionFactory;
 import org.springframework.amqp.rabbit.core.RabbitAdmin;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
-import org.springframework.amqp.rabbit.retry.MessageRecoverer;
-import org.springframework.amqp.rabbit.retry.RepublishMessageRecoverer;
 import org.springframework.amqp.support.converter.Jackson2JsonMessageConverter;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
+import org.springframework.boot.autoconfigure.amqp.RabbitRetryTemplateCustomizer;
 import org.springframework.boot.autoconfigure.amqp.SimpleRabbitListenerContainerFactoryConfigurer;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.mail.javamail.JavaMailSender;
 import org.springframework.mail.javamail.JavaMailSenderImpl;
-import org.springframework.retry.backoff.ExponentialBackOffPolicy;
 import org.springframework.retry.policy.SimpleRetryPolicy;
-import org.springframework.retry.support.RetryTemplate;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import java.util.Map;
 import java.util.Properties;
 
 @Configuration
 public class TicketingConfiguration {
+
+    private static final String DLQ_SUFFIX = ".dlq";
 
     @Bean
     @ConditionalOnMissingBean
@@ -91,22 +92,20 @@ public class TicketingConfiguration {
             @Value("${ticketing.rabbitmq.queue.booking-confirmed}") String bookingConfirmedQueue,
             @Value("${ticketing.rabbitmq.queue.concession-order-confirmed}") String concessionOrderConfirmedQueue,
             @Value("${ticketing.rabbitmq.queue.ticket-issued}") String ticketIssuedQueue,
-            @Value("${ticketing.rabbitmq.routing-key.booking-confirmed}") String bookingConfirmedRoutingKey
+            @Value("${ticketing.rabbitmq.routing-key.booking-confirmed}") String bookingConfirmedRoutingKey,
+            @Value("${ticketing.rabbitmq.routing-key.user-registered}") String userRegisteredRoutingKey,
+            @Value("${ticketing.rabbitmq.routing-key.user-email-changed}") String userEmailChangedRoutingKey
     ) {
         TopicExchange mainExchange = new TopicExchange(exchange, true, false);
         TopicExchange dlxExchange = new TopicExchange("cine.dlx", true, false);
 
         Queue dlq = new Queue("ticketing.dlq", true);
 
-        Queue userRegistered = QueueBuilder.durable(userRegisteredQueue)
-                .withArgument("x-dead-letter-exchange", "cine.dlx")
-                .withArgument("x-dead-letter-routing-key", "ticketing.dlq")
-                .build();
-
-        Queue userEmailChanged = QueueBuilder.durable(userEmailChangedQueue)
-                .withArgument("x-dead-letter-exchange", "cine.dlx")
-                .withArgument("x-dead-letter-routing-key", "ticketing.dlq")
-                .build();
+        // Auth events: one dead-letter queue per queue (ADR-007), reached through cine.dlx.
+        Queue userRegistered = durableWithDeadLetter(userRegisteredQueue);
+        Queue userRegisteredDlq = new Queue(userRegisteredQueue + DLQ_SUFFIX, true);
+        Queue userEmailChanged = durableWithDeadLetter(userEmailChangedQueue);
+        Queue userEmailChangedDlq = new Queue(userEmailChangedQueue + DLQ_SUFFIX, true);
 
         Queue bookingConfirmed = QueueBuilder.durable(bookingConfirmedQueue)
                 .withArgument("x-dead-letter-exchange", "cine.dlx")
@@ -123,46 +122,40 @@ public class TicketingConfiguration {
                 .withArgument("x-dead-letter-routing-key", "ticketing.dlq")
                 .build();
 
-        Binding b1 = BindingBuilder.bind(userRegistered).to(mainExchange).with("user.registered");
-        Binding b2 = BindingBuilder.bind(userEmailChanged).to(mainExchange).with("user.email.changed");
+        Binding sharedDlq = BindingBuilder.bind(dlq).to(dlxExchange).with("ticketing.dlq");
+        Binding b1 = BindingBuilder.bind(userRegistered).to(mainExchange).with(userRegisteredRoutingKey);
+        Binding b2 = BindingBuilder.bind(userEmailChanged).to(mainExchange).with(userEmailChangedRoutingKey);
+        Binding d1 = BindingBuilder.bind(userRegisteredDlq).to(dlxExchange).with(userRegisteredQueue + DLQ_SUFFIX);
+        Binding d2 = BindingBuilder.bind(userEmailChangedDlq).to(dlxExchange).with(userEmailChangedQueue + DLQ_SUFFIX);
         Binding b3 = BindingBuilder.bind(concessionOrderConfirmed).to(mainExchange).with("cine.concessions.order-confirmed.v1");
         Binding b4 = BindingBuilder.bind(ticketIssued).to(mainExchange).with("cine.ticketing_fulfillment.ticket-issued.v1");
         Binding b5 = BindingBuilder.bind(bookingConfirmed).to(mainExchange).with(bookingConfirmedRoutingKey);
 
         return new Declarables(
                 userRegistered, userEmailChanged, concessionOrderConfirmed, ticketIssued,
-                new Queue("ticketing.dlq", true),
-                mainExchange, dlxExchange
+                userRegisteredDlq, userEmailChangedDlq,
+                dlq, mainExchange, dlxExchange,
+                b1, b2, d1, d2, sharedDlq
         );
+    }
+
+    private static Queue durableWithDeadLetter(String name) {
+        return QueueBuilder.durable(name)
+                .withArgument("x-dead-letter-exchange", "cine.dlx")
+                .withArgument("x-dead-letter-routing-key", name + DLQ_SUFFIX)
+                .build();
     }
 
     @Bean
     public SimpleRabbitListenerContainerFactory rabbitListenerContainerFactory(
             SimpleRabbitListenerContainerFactoryConfigurer configurer,
             ConnectionFactory connectionFactory,
-            @Value("${ticketing.rabbitmq.consumer.recovery.initial-interval-ms:1000}") long initialIntervalMs,
-            @Value("${ticketing.rabbitmq.consumer.recovery.max-interval-ms:30000}") long maxIntervalMs,
-            @Value("${ticketing.rabbitmq.consumer.recovery.multiplier:2.0}") double multiplier,
-            @Value("${ticketing.rabbitmq.consumer.recovery.max-attempts:0}") long maxAttempts,
             @Value("${ticketing.rabbitmq.consumer.cancel.log-warn:true}") boolean logCancelWarn
     ) {
         SimpleRabbitListenerContainerFactory factory = new SimpleRabbitListenerContainerFactory();
         configurer.configure(factory, connectionFactory);
 
         factory.setRecoveryInterval(1000L);
-
-        RetryTemplate retryTemplate = new RetryTemplate();
-        ExponentialBackOffPolicy backOffPolicy = new ExponentialBackOffPolicy();
-        backOffPolicy.setInitialInterval(initialIntervalMs);
-        backOffPolicy.setMaxInterval(maxIntervalMs);
-        backOffPolicy.setMultiplier(multiplier);
-        retryTemplate.setBackOffPolicy(backOffPolicy);
-
-        SimpleRetryPolicy retryPolicy = new SimpleRetryPolicy();
-        retryPolicy.setMaxAttempts(Math.toIntExact(maxAttempts));
-        retryTemplate.setRetryPolicy(retryPolicy);
-
-        factory.setRetryTemplate(retryTemplate);
 
         factory.setMissingQueuesFatal(false);
         factory.setAutoStartup(true);
@@ -178,10 +171,20 @@ public class TicketingConfiguration {
         return admin;
     }
 
+    /**
+     * The listener retries come from spring.rabbitmq.listener.simple.retry (ADR-007). When they run out the
+     * message is rejected without requeue and the broker dead-letters it through cine.dlx. A message that
+     * can never succeed (AmqpRejectAndDontRequeueException) skips the retries.
+     */
     @Bean
-    public MessageRecoverer deadLetterRecoverer(RabbitTemplate rabbitTemplate,
-            @Value("${ticketing.rabbitmq.queue.dlq}") String dlqQueue) {
-        return new RepublishMessageRecoverer(rabbitTemplate, dlqQueue, null);
+    public RabbitRetryTemplateCustomizer rejectedMessagesAreNotRetried(
+            @Value("${spring.rabbitmq.listener.simple.retry.max-attempts:3}") int maxAttempts) {
+        return (target, template) -> {
+            if (target == RabbitRetryTemplateCustomizer.Target.LISTENER) {
+                template.setRetryPolicy(new SimpleRetryPolicy(maxAttempts,
+                        Map.of(AmqpRejectAndDontRequeueException.class, false), true, true));
+            }
+        };
     }
 
     @Bean
