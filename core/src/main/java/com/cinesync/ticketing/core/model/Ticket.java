@@ -70,6 +70,15 @@ public class Ticket {
     @Column(name = "updated_at", nullable = false)
     private Instant updatedAt;
 
+    /** Records the stored PDF once; a repeated report of the same ticket changes nothing and returns false. */
+    public boolean attachPdf(String url) {
+        if (pdfUrl != null) {
+            return false;
+        }
+        pdfUrl = url;
+        return true;
+    }
+
     @Getter
     @Setter
     @NoArgsConstructor
