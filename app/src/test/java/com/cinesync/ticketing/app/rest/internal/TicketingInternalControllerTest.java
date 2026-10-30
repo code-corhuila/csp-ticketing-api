@@ -2,6 +2,7 @@ package com.cinesync.ticketing.app.rest.internal;
 
 import com.cinesync.ticketing.core.model.TicketNotFoundException;
 import com.cinesync.ticketing.core.port.in.TicketDeliveryUseCase;
+import com.cinesync.ticketing.core.port.in.TicketDeliveryUseCase.DispatchResult;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
@@ -15,6 +16,7 @@ import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -54,5 +56,24 @@ class TicketingInternalControllerTest {
                         .contentType(MediaType.APPLICATION_JSON).content("{\"pdfUrl\":\"https://files.example.com/a.pdf\"}"))
                 .andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.error").value("TICKET_NOT_FOUND"));
+    }
+
+    @Test
+    void dispatch_returnsWhatHappened() throws Exception {
+        when(delivery.dispatchDue(20)).thenReturn(new DispatchResult(2, 1, 0));
+
+        mvc.perform(post("/internal/fulfillments/dispatch").param("limit", "20"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.sent").value(2))
+                .andExpect(jsonPath("$.retried").value(1))
+                .andExpect(jsonPath("$.failed").value(0));
+    }
+
+    @Test
+    void dispatch_limitOutsideOneToOneHundred_isABadRequest() throws Exception {
+        mvc.perform(post("/internal/fulfillments/dispatch").param("limit", "0")).andExpect(status().isBadRequest());
+        mvc.perform(post("/internal/fulfillments/dispatch").param("limit", "101")).andExpect(status().isBadRequest());
+
+        verify(delivery, never()).dispatchDue(any(Integer.class));
     }
 }
