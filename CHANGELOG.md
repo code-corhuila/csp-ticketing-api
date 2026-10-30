@@ -2,6 +2,15 @@
 
 ## [Unreleased]
 
+### Added
+- HU-TICKETING-002 (ADR-057): `POST /internal/tickets/{ticketId}/pdf` records the PDF URL the worker reports and writes `TicketIssued` to the `outbox_event` table in the same transaction, once per ticket; the csp-worker relay publishes it. Requires `csp-ticketing-db` V007.
+
+### Changed
+- The internal routes answer with the platform error envelope (`error`, `message`, `details`, `traceId`). They are still not authenticated: the service-token check is `csp-ticketing-api#12`.
+
+### Removed
+- `EventPublisherPort` and `RabbitEventPublisher`: the API no longer publishes to the broker (norm 5.3.11).
+
 ### Changed
 - HU-TICKETING-002 (ADR-057): `BookingConfirmed` no longer fails when the contact projection does not exist yet. The ticket is stored with `user_id` (the contact id stays empty) and its delivery stays `PENDING`. A null `showtimeStartsAt` (Booking sends it until Catalog exists) is accepted and the PDF prints "To be confirmed". Requires `csp-ticketing-db` V007 to V009.
 - The Booking and Concessions queues are named `cine.ticketing_fulfillment.booking-confirmed` and `cine.ticketing_fulfillment.concession-order-confirmed`, each with its own `.dlq` through `cine.dlx` (ADR-036); the old `ticketing.*` queues must be drained and deleted by hand.

@@ -6,7 +6,6 @@ import com.cinesync.ticketing.core.model.TicketingFulfillment;
 import com.cinesync.ticketing.core.model.UserContact;
 import com.cinesync.ticketing.core.port.in.BookingConfirmation;
 import com.cinesync.ticketing.core.port.in.TicketingCommandUseCase;
-import com.cinesync.ticketing.core.port.out.EventPublisherPort;
 import com.cinesync.ticketing.core.port.out.InboxEventRepository;
 import com.cinesync.ticketing.core.port.out.PendingConcessionOrderRepository;
 import com.cinesync.ticketing.core.port.out.TicketRepository;
@@ -33,7 +32,6 @@ public class TicketingCommandService implements TicketingCommandUseCase {
     private final TicketingFulfillmentRepository fulfillmentRepository;
     private final InboxEventRepository inboxEventRepository;
     private final PendingConcessionOrderRepository pendingConcessionOrderRepository;
-    private final EventPublisherPort eventPublisherPort;
     private final ObjectMapper objectMapper;
 
     @Override

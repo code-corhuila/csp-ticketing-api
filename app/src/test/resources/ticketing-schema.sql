@@ -1,6 +1,6 @@
 -- Test fixture: the part of the ticketing_fulfillment schema that the consumers use.
 -- Mirrors csp-ticketing-db V001 to V009 (schema, user_contact, inbox_event, tickets, ticketing_fulfillments,
--- pending_concession_order) so the integration tests run against the same table shape; the API itself
+-- pending_concession_order, outbox_event) so the integration tests run against the same table shape; the API itself
 -- never runs migrations.
 CREATE SCHEMA ticketing_fulfillment;
 
@@ -71,4 +71,14 @@ CREATE TABLE ticketing_fulfillment.pending_concession_order (
     created_at     TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at     TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     CONSTRAINT pk_pending_concession_order PRIMARY KEY (reservation_id)
+);
+
+CREATE TABLE ticketing_fulfillment.outbox_event (
+    id             UUID        NOT NULL DEFAULT gen_random_uuid(),
+    aggregate_type TEXT        NOT NULL,
+    aggregate_id   UUID        NOT NULL,
+    event_type     TEXT        NOT NULL,
+    payload        JSONB       NOT NULL,
+    created_at     TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    CONSTRAINT pk_outbox_event PRIMARY KEY (id)
 );
