@@ -17,9 +17,6 @@ public interface TicketJpaRepository extends JpaRepository<Ticket, UUID>, Ticket
     @Override
     Optional<Ticket> findByReservationId(UUID reservationId);
 
-    @Override
-    List<Ticket> findByUserContactId(UUID userContactId, int page, int limit);
-
     @Modifying
     @Query("UPDATE Ticket t SET t.concessionsSnapshot = :items, t.updatedAt = CURRENT_TIMESTAMP WHERE t.reservationId = :reservationId AND t.concessionsSnapshot IS NULL")
     int updateConcessionsSnapshotByReservationId(@Param("reservationId") UUID reservationId, @Param("items") List<Ticket.ConcessionItem> items);
