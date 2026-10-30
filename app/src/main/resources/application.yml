@@ -62,13 +62,14 @@ spring:
 
 ticketing:
   rabbitmq:
-    exchange: cine.ticketing_fulfillment
+    exchange: cine.events
     routing-key:
-      ticket-issued: ticketing_fulfillment.ticket-issued.v1
+      booking-confirmed: cine.booking.booking-confirmed.v1
+      ticket-issued: cine.ticketing_fulfillment.ticket-issued.v1
     queue:
       user-registered: ticketing.user-registered
       user-email-changed: ticketing.user-email-changed
-      booking-confirmed: ticketing.booking-confirmed
+      booking-confirmed: ticketing.booking-confirmed.v1
       concession-order-confirmed: ticketing.concession-order-confirmed
       ticket-issued: ticketing.ticket-issued
       dlq: ticketing.dlq
