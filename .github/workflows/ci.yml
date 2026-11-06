@@ -1,0 +1,48 @@
+name: CI
+
+# Every Pull Request builds the repository and runs its tests on a clean machine.
+# "It works on my computer" is not evidence; a green check here is.
+
+on:
+  pull_request:
+    branches: [develop, qa, main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      DB_DEPLOY_KEY: ${{ secrets.DB_DEPLOY_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+      # The integration tests build their schema by applying the migrations of csp-ticketing-db (norm 5.2.1: this repository
+      # never owns the schema). DB_DEPLOY_KEY is the private half of a read-only deploy key of that repository; GITHUB_TOKEN
+      # cannot read another one. Without it the build fails: a green run must mean the integration tests really ran.
+      - name: Require the schema key
+        if: env.DB_DEPLOY_KEY == ''
+        run: |
+          echo "::error::DB_DEPLOY_KEY is not set, so the PostgreSQL integration tests cannot run"
+          exit 1
+      # Pinned to a commit of csp-ticketing-db until it publishes a release tag vX.Y.Z (numeral 11.5): a green run tells which
+      # schema it tested, and a schema change there cannot break an unrelated Pull Request. Move the pin on purpose.
+      - uses: actions/checkout@v4
+        with:
+          repository: code-corhuila/csp-ticketing-db
+          ref: 80154de17f6fa03f9235c1bbc174219ee3c2bc13
+          path: csp-ticketing-db
+          ssh-key: ${{ secrets.DB_DEPLOY_KEY }}
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+      # The tests start PostgreSQL and RabbitMQ with Testcontainers (Docker is on the runner).
+      - run: mvn -B verify -Dticketing.db.dir=${{ github.workspace }}/csp-ticketing-db/sql
