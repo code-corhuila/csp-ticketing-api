@@ -10,6 +10,7 @@ public interface TicketingCommandUseCase {
     void handleUserRegistered(UUID userId, String email, Instant occurredAt);
     void handleUserEmailChanged(UUID userId, String email, Instant occurredAt);
     void handleBookingConfirmed(BookingConfirmation booking, String correlationId);
+    void handleReservationExpired(ReservationExpiration expiration, String correlationId);
     void handleConcessionOrderConfirmed(UUID reservationId, String itemsJson, String eventId, String correlationId);
     Ticket getOrCreateTicketForReservation(UUID reservationId);
 }

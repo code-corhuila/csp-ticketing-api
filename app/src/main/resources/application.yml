@@ -66,12 +66,14 @@ ticketing:
       user-registered: cine.auth.user-registered.v1
       user-email-changed: cine.auth.user-email-changed.v1
       booking-confirmed: cine.booking.booking-confirmed.v1
+      reservation-expired: cine.booking.reservation-expired.v1
       ticket-issued: cine.ticketing_fulfillment.ticket-issued.v1
       concession-order-confirmed: cine.concessions.order-confirmed.v1
     queue:
       user-registered: cine.ticketing_fulfillment.user-registered
       user-email-changed: cine.ticketing_fulfillment.user-email-changed
       booking-confirmed: cine.ticketing_fulfillment.booking-confirmed
+      reservation-expired: cine.ticketing_fulfillment.reservation-expired
       concession-order-confirmed: cine.ticketing_fulfillment.concession-order-confirmed
       ticket-issued: cine.ticketing_fulfillment.ticket-issued
     # Queue declaration at startup (before relay enabled)
