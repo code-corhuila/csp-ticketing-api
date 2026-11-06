@@ -23,6 +23,7 @@ import static org.awaitility.Awaitility.await;
 class NotificationFlowTest extends ProjectionTestSupport {
 
     private static final String BOOKING_KEY = "cine.booking.booking-confirmed.v1";
+    private static final String EXPIRED_KEY = "cine.booking.reservation-expired.v1";
     private static final String PDF_URL = "s3://tickets/tickets/r/t.pdf";
 
     @Autowired
@@ -124,5 +125,37 @@ class NotificationFlowTest extends ProjectionTestSupport {
         assertThat(second.data()).singleElement().extracting(NotificationView::type).isEqualTo(NotificationType.BOOKING_CONFIRMED);
         assertThat(query.listMine(user, 3, 1).data()).isEmpty();
         assertThat(notifications.countByUserId(user)).isEqualTo(2);
+    }
+
+    private static String reservationExpired(UUID eventId, UUID reservationId, UUID userId) {
+        return """
+                {"eventId":"%s","eventType":"ReservationExpired","occurredAt":"2026-11-06T20:05:00Z","version":1,
+                 "source":"booking-service","aggregateId":"%s","aggregateType":"Reservation",
+                 "payload":{"reservationId":"%s","userId":"%s","showtimeId":"%s","seatNumbers":["B3","B4"],
+                            "expiredAt":"2026-11-06T20:00:00Z"},
+                 "metadata":{"correlationId":"%s"}}
+                """.formatted(eventId, reservationId, reservationId, userId, UUID.randomUUID(), UUID.randomUUID());
+    }
+
+    @Test
+    void reservationExpired_createsOneNotificationEvenIfTheEventIsDeliveredAgain() {
+        UUID user = UUID.randomUUID();
+        UUID reservation = UUID.randomUUID();
+        UUID eventId = UUID.randomUUID();
+
+        publish(EXPIRED_KEY, reservationExpired(eventId, reservation, user));
+        await().atMost(15, TimeUnit.SECONDS).until(() -> inbox.findByEventId(eventId).isPresent());
+        publish(EXPIRED_KEY, reservationExpired(eventId, reservation, user));
+        publish(EXPIRED_KEY, reservationExpired(UUID.randomUUID(), reservation, user));
+        UUID barrier = UUID.randomUUID();
+        publish(EXPIRED_KEY, reservationExpired(barrier, UUID.randomUUID(), UUID.randomUUID()));
+        await().atMost(15, TimeUnit.SECONDS).until(() -> inbox.findByEventId(barrier).isPresent());
+
+        assertThat(count(reservation, NotificationType.RESERVATION_EXPIRED)).isEqualTo(1);
+        assertThat(query.listMine(user, 1, 20).data()).singleElement().satisfies(n -> {
+            assertThat(n.type()).isEqualTo(NotificationType.RESERVATION_EXPIRED);
+            assertThat(n.message()).isEqualTo("Tu reserva venció y los asientos B3, B4 quedaron libres.");
+            assertThat(n.metadata()).containsEntry("expiredAt", "2026-11-06T20:00:00Z");
+        });
     }
 }

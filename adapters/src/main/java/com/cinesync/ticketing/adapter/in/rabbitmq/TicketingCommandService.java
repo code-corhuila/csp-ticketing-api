@@ -7,6 +7,7 @@ import com.cinesync.ticketing.core.model.Ticket;
 import com.cinesync.ticketing.core.model.TicketingFulfillment;
 import com.cinesync.ticketing.core.model.UserContact;
 import com.cinesync.ticketing.core.port.in.BookingConfirmation;
+import com.cinesync.ticketing.core.port.in.ReservationExpiration;
 import com.cinesync.ticketing.core.port.in.TicketingCommandUseCase;
 import com.cinesync.ticketing.core.port.out.InboxEventRepository;
 import com.cinesync.ticketing.core.port.out.PendingConcessionOrderRepository;
@@ -114,6 +115,16 @@ public class TicketingCommandService implements TicketingCommandUseCase {
         // Do NOT generate PDF, send email, or publish TicketIssued here.
         // The worker will generate the PDF, upload it, and call the internal endpoint
         // to provide the pdfUrl, at which point we'll publish TicketIssued.
+    }
+
+    @Override
+    @Transactional
+    public void handleReservationExpired(ReservationExpiration expiration, String correlationId) {
+        UUID reservationId = expiration.reservationId();
+        log.info("Processing ReservationExpired: reservationId={}, correlationId={}", reservationId, correlationId);
+        ticketRepository.lockReservation(reservationId);
+        notificationRecorder.record(Notification.reservationExpired(expiration.userId(), reservationId,
+                expiration.showtimeId(), expiration.seatNumbers(), expiration.expiredAt()));
     }
 
     @Override

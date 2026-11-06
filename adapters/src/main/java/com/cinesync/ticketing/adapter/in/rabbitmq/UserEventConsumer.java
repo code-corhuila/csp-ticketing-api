@@ -63,6 +63,17 @@ public class UserEventConsumer {
         commandUseCase.handleBookingConfirmed(event.booking(), event.correlationId());
     }
 
+    @RabbitListener(queues = "${ticketing.rabbitmq.queue.reservation-expired}")
+    @Transactional
+    public void onReservationExpired(String message) {
+        ReservationExpiredEvent event = ReservationExpiredEvent.parse(message, objectMapper);
+        if (!inboxEventRepository.tryInsert(event.eventId(), "ReservationExpired")) {
+            log.info("Duplicate eventId {} for ReservationExpired, skipping", event.eventId());
+            return;
+        }
+        commandUseCase.handleReservationExpired(event.expiration(), event.correlationId());
+    }
+
     @RabbitListener(queues = "${ticketing.rabbitmq.queue.concession-order-confirmed}")
     @Transactional
     public void onConcessionOrderConfirmed(String message) {
