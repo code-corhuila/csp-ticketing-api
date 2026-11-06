@@ -32,6 +32,10 @@ services:
       SMTP_PORT: ${TICKETING_SMTP_PORT:-1025}
       SMTP_USER: ${TICKETING_SMTP_USER:-}
       SMTP_PASS: ${TICKETING_SMTP_PASSWORD:-}
+      # The mail health check connects with these settings. A real provider needs both (the defaults); the development catcher has no
+      # authentication and no TLS, so the platform env file sets both to false there.
+      SPRING_MAIL_PROPERTIES_MAIL_SMTP_AUTH: ${TICKETING_SMTP_AUTH:-true}
+      SPRING_MAIL_PROPERTIES_MAIL_SMTP_STARTTLS_ENABLE: ${TICKETING_SMTP_STARTTLS:-true}
       TICKETING_PORTAL_URL: ${TICKETING_PORTAL_URL:-http://localhost:4205}
     expose: ["8084"]
     networks: [platform]
