@@ -10,7 +10,7 @@ public interface TicketQueryUseCase {
 
     /**
      * The tickets of the user, by showtime start and then by creation, newest first; {@code page} starts at 1. A ticket
-     * with no start time yet (Catalog does not exist) comes after the ones that have it.
+     * with no start time (a hold written before Booking kept it, csp-booking-api#84) comes after the ones that have it.
      */
     PageResult<TicketView> listMine(UUID userId, int page, int limit);
 
