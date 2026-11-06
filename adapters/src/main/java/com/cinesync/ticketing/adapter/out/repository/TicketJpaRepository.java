@@ -27,6 +27,16 @@ public interface TicketJpaRepository extends JpaRepository<Ticket, UUID>, Ticket
     @Query("SELECT t FROM Ticket t WHERE t.id = :id")
     Optional<Ticket> lockById(@Param("id") UUID id);
 
+    @Query("SELECT t FROM Ticket t WHERE t.userId = :userId "
+            + "ORDER BY t.showtimeStartsAt DESC NULLS LAST, t.createdAt DESC, t.id DESC")
+    List<Ticket> findByUser(@Param("userId") UUID userId, Pageable pageable);
+
+    /** The offset is always a multiple of the limit (it comes from a page number), so it maps to a page of the same size. */
+    @Override
+    default List<Ticket> findPageByUserId(UUID userId, int limit, int offset) {
+        return findByUser(userId, PageRequest.of(offset / limit, limit));
+    }
+
     @Override
     default Optional<Ticket> findByIdForUpdate(UUID id) {
         return lockById(id);
