@@ -1,5 +1,6 @@
 package com.cinesync.ticketing.adapter.service;
 
+import com.cinesync.ticketing.core.model.Notification;
 import com.cinesync.ticketing.core.model.OutboxEvent;
 import com.cinesync.ticketing.core.model.Ticket;
 import com.cinesync.ticketing.core.model.TicketEmail;
@@ -49,6 +50,7 @@ public class TicketDeliveryService implements TicketDeliveryUseCase {
     private final ObjectMapper objectMapper;
     private final Clock clock;
     private final PlatformTransactionManager transactionManager;
+    private final NotificationRecorder notificationRecorder;
 
     /** How long a ticket waits before its document is rendered, for the concession order to reach it. */
     @Value("${ticketing.pdf.min-age-seconds:60}")
@@ -88,6 +90,7 @@ public class TicketDeliveryService implements TicketDeliveryUseCase {
         }
         ticketRepository.save(ticket);
         outboxRepository.save(ticketIssued(ticket, correlationId));
+        notificationRecorder.record(Notification.ticketIssued(ticket));
     }
 
     @Override
