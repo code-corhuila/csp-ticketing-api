@@ -36,6 +36,7 @@ class NotificationsControllerTest {
     private final NotificationQueryUseCase query = mock(NotificationQueryUseCase.class);
     private final MockMvc mvc = MockMvcBuilders.standaloneSetup(new NotificationsController(query))
             .setCustomArgumentResolvers(new AuthenticationPrincipalArgumentResolver())
+            .setControllerAdvice(new PaginationExceptionHandler())
             .setMessageConverters(new MappingJackson2HttpMessageConverter(new TicketingConfiguration().objectMapper()))
             .build();
     private final UUID user = UUID.randomUUID();

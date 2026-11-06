@@ -5,6 +5,7 @@ import com.cinesync.ticketing.adapter.in.rabbitmq.UserEventConsumer;
 import com.cinesync.ticketing.adapter.out.repository.UserContactJpaRepository;
 import com.cinesync.ticketing.adapter.service.NotificationQueryService;
 import com.cinesync.ticketing.adapter.service.NotificationRecorder;
+import com.cinesync.ticketing.adapter.service.TicketQueryService;
 import com.cinesync.ticketing.adapter.service.TicketDeliveryService;
 import com.cinesync.ticketing.app.config.ConsumerLifecycleListener;
 import com.cinesync.ticketing.app.config.ConsumerReadinessIndicator;
@@ -26,7 +27,7 @@ import org.springframework.data.jpa.repository.config.EnableJpaRepositories;
 @EntityScan(basePackageClasses = UserContact.class)
 @EnableJpaRepositories(basePackageClasses = UserContactJpaRepository.class)
 @Import({TicketingConfiguration.class, UserEventConsumer.class, TicketingCommandService.class,
-        TicketDeliveryService.class, NotificationRecorder.class, NotificationQueryService.class,
+        TicketDeliveryService.class, NotificationRecorder.class, NotificationQueryService.class, TicketQueryService.class,
         ConsumerReadinessIndicator.class, ConsumerLifecycleListener.class})
 public class ProjectionApp {
 }
