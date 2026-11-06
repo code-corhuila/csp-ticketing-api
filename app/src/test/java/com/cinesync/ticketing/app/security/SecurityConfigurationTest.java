@@ -2,6 +2,7 @@ package com.cinesync.ticketing.app.security;
 
 import com.cinesync.ticketing.app.rest.TicketPdfController;
 import com.cinesync.ticketing.app.rest.TicketingController;
+import com.cinesync.ticketing.app.rest.internal.PdfUrlPolicy;
 import com.cinesync.ticketing.app.rest.internal.TicketingInternalController;
 import com.cinesync.ticketing.core.port.in.TicketDeliveryUseCase;
 import com.cinesync.ticketing.core.port.in.TicketPdfDownloadUseCase;
@@ -48,7 +49,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  */
 @WebMvcTest
 @ContextConfiguration(classes = {SecurityConfiguration.class, JwtKeyConfiguration.class, TicketPdfController.class,
-        TicketingInternalController.class, TicketingController.class})
+        TicketingInternalController.class, TicketingController.class, PdfUrlPolicy.class})
 class SecurityConfigurationTest {
 
     private static final KeyPair KEYS = generate();
@@ -72,6 +73,8 @@ class SecurityConfigurationTest {
     static void keyAndSubjects(DynamicPropertyRegistry registry) {
         registry.add("ticketing.jwt.public-key", () -> pem((RSAPublicKey) KEYS.getPublic()));
         registry.add("ticketing.security.service-subjects", () -> "csp-worker");
+        registry.add("ticketing.object-storage.url", () -> "http://rustfs:9000");
+        registry.add("ticketing.object-storage.bucket", () -> "tickets");
     }
 
     @BeforeEach
@@ -241,5 +244,38 @@ class SecurityConfigurationTest {
         mvc.perform(get(AWAITING).header("Authorization", bearer(wrongAudience))).andExpect(status().isUnauthorized());
         mvc.perform(get(AWAITING).header("Authorization", bearer(noAudience))).andExpect(status().isUnauthorized());
         mvc.perform(get(AWAITING).header("Authorization", bearer(listedAudience))).andExpect(status().isOk());
+    }
+
+    // ---- csp-docs#293: the registration of the PDF is for the allowed services only
+
+    @Test
+    void theRegistrationOfAPdfTakesOnlyAnAllowedServiceCredential() throws Exception {
+        String url = "/internal/tickets/%s/pdf".formatted(ticket);
+        String body = "{\"pdfUrl\":\"s3://tickets/tickets/r/t.pdf\"}";
+        String client = sign(userClaims().build(), KEYS);
+        String other = sign(serviceClaims("booking-service").build(), KEYS);
+        String worker = sign(serviceClaims("csp-worker").build(), KEYS);
+
+        mvc.perform(post(url).contentType("application/json").content(body)).andExpect(status().isUnauthorized());
+        mvc.perform(post(url).contentType("application/json").content(body).header("Authorization", bearer(client)))
+                .andExpect(status().isUnauthorized());
+        mvc.perform(post(url).contentType("application/json").content(body).header("Authorization", bearer(other)))
+                .andExpect(status().isForbidden());
+        verifyNoInteractions(delivery);
+
+        mvc.perform(post(url).contentType("application/json").content(body).header("Authorization", bearer(worker)))
+                .andExpect(status().isOk());
+        verify(delivery).registerPdf(eq(ticket), eq("s3://tickets/tickets/r/t.pdf"), any());
+    }
+
+    @Test
+    void theClientRoutesNeedThePermissionToReadOwnTickets() throws Exception {
+        String noPermission = sign(userClaims().claim("permissions", List.of("catalog:read")).build(), KEYS);
+
+        for (String path : List.of("/api/v1/ticketing/me/tickets", "/api/v1/ticketing/me/notifications")) {
+            mvc.perform(get(path)).andExpect(status().isUnauthorized());
+            mvc.perform(get(path).header("Authorization", bearer(noPermission))).andExpect(status().isForbidden())
+                    .andExpect(jsonPath("$.error").value("FORBIDDEN"));
+        }
     }
 }
