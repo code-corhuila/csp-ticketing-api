@@ -27,6 +27,7 @@ public class TicketingInternalController {
     private static final int MAX_LIMIT = 100;
 
     private final TicketDeliveryUseCase deliveryUseCase;
+    private final PdfUrlPolicy pdfUrlPolicy;
 
     @PostMapping("/tickets/{ticketId}/pdf")
     public ResponseEntity<Void> receivePdfUrl(
@@ -35,6 +36,9 @@ public class TicketingInternalController {
             @RequestBody PdfUrlRequest request) {
         if (request.pdfUrl() == null || request.pdfUrl().isBlank() || request.pdfUrl().length() > MAX_PDF_URL_LENGTH) {
             throw new InvalidRequestException("pdfUrl is required and at most " + MAX_PDF_URL_LENGTH + " characters");
+        }
+        if (!pdfUrlPolicy.accepts(request.pdfUrl())) {
+            throw new InvalidRequestException("pdfUrl must point to the object storage of the platform");
         }
         deliveryUseCase.registerPdf(ticketId, request.pdfUrl(),
                 correlationId == null || correlationId.isBlank() ? UUID.randomUUID().toString() : correlationId);
