@@ -13,6 +13,9 @@ public interface TicketRepository {
     /** The ticket, locked until the current transaction ends, so concurrent changes to it run one at a time. */
     Optional<Ticket> findByIdForUpdate(UUID id);
     Ticket save(Ticket ticket);
+    /** The tickets of a user by showtime start (the ones without a start last) and creation, newest first. */
+    List<Ticket> findPageByUserId(UUID userId, int limit, int offset);
+    long countByUserId(UUID userId);
     /** Tickets created before the given instant that have no PDF yet, oldest first. */
     List<Ticket> findAwaitingPdf(Instant createdBefore, int limit);
     int updateConcessionsSnapshotByReservationId(UUID reservationId, List<Ticket.ConcessionItem> items);
