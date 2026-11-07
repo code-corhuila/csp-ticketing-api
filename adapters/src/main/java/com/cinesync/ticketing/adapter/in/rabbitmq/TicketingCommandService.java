@@ -1,5 +1,7 @@
 package com.cinesync.ticketing.adapter.in.rabbitmq;
 
+import com.cinesync.ticketing.adapter.service.NotificationRecorder;
+import com.cinesync.ticketing.core.model.Notification;
 import com.cinesync.ticketing.core.model.PendingConcessionOrder;
 import com.cinesync.ticketing.core.model.Ticket;
 import com.cinesync.ticketing.core.model.TicketingFulfillment;
@@ -33,6 +35,7 @@ public class TicketingCommandService implements TicketingCommandUseCase {
     private final InboxEventRepository inboxEventRepository;
     private final PendingConcessionOrderRepository pendingConcessionOrderRepository;
     private final ObjectMapper objectMapper;
+    private final NotificationRecorder notificationRecorder;
 
     @Override
     @Transactional
@@ -95,6 +98,7 @@ public class TicketingCommandService implements TicketingCommandUseCase {
                 .build();
 
         ticket = ticketRepository.save(ticket);
+        notificationRecorder.record(Notification.bookingConfirmed(ticket));
 
         // Merge any pending concessions that arrived before BookingConfirmed (order doesn't matter)
         mergePendingConcessions(reservationId, ticket);
