@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [3.0.0] - 2026-11-07
+
 ### Fixed
 - One delivery that cannot be processed no longer stops the others of the same `POST /internal/fulfillments/dispatch` run: a ticket that is gone (`findById().orElseThrow()` inside the transaction) or any other failure of one delivery is rolled back, logged and skipped, and the run goes on (HU-TICKETING-004, csp-ticketing-api#75). New tests: an email that fails and then succeeds leaves the delivery `SENT` with no error, a delivery that ends `FAILED` does not block the others, and `TicketDeliveryServiceTest` covers the vanished ticket.
 - `TicketDeliveryTest` failed in some full runs and passed alone (csp-ticketing-api#76): `makeDue` set `next_retry_at` from the clock of the PostgreSQL container (`now() - interval '1 second'`) while the service compares it with the clock of the JVM, and the two clocks differed by up to about 1.4 seconds in the runs measured, so a delivery meant to be due was not. It now sets the instant from the clock of the JVM. Only the test changed; the service already reads one clock (the injected `Clock`).
