@@ -30,7 +30,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 class TicketingInternalControllerTest {
 
     private final TicketDeliveryUseCase delivery = mock(TicketDeliveryUseCase.class);
-    private final MockMvc mvc = MockMvcBuilders.standaloneSetup(new TicketingInternalController(delivery))
+    private final MockMvc mvc = MockMvcBuilders.standaloneSetup(new TicketingInternalController(delivery, new PdfUrlPolicy("http://rustfs:9000", "tickets")))
             .setMessageConverters(new MappingJackson2HttpMessageConverter(new TicketingConfiguration().objectMapper()))
             .build();
     private final UUID ticketId = UUID.randomUUID();
@@ -38,10 +38,10 @@ class TicketingInternalControllerTest {
     @Test
     void pdfUrl_isRegisteredWithTheCorrelationIdOfTheCall() throws Exception {
         mvc.perform(post("/internal/tickets/{id}/pdf", ticketId).header("X-Correlation-Id", "corr-1")
-                        .contentType(MediaType.APPLICATION_JSON).content("{\"pdfUrl\":\"https://files.example.com/a.pdf\"}"))
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"pdfUrl\":\"s3://tickets/tickets/r/t.pdf\"}"))
                 .andExpect(status().isOk());
 
-        verify(delivery).registerPdf(ticketId, "https://files.example.com/a.pdf", "corr-1");
+        verify(delivery).registerPdf(ticketId, "s3://tickets/tickets/r/t.pdf", "corr-1");
     }
 
     @Test
@@ -57,11 +57,33 @@ class TicketingInternalControllerTest {
     }
 
     @Test
+    void pdfUrl_ofAnotherHost_isABadRequestAndNothingIsStored() throws Exception {
+        for (String url : List.of("https://evil.example.com/a.pdf", "http://rustfs:9000@evil.example.com/a.pdf", "s3://other/a.pdf",
+                "javascript:alert(1)", "http://rustfs:9001/tickets/a.pdf")) {
+            mvc.perform(post("/internal/tickets/{id}/pdf", ticketId)
+                            .contentType(MediaType.APPLICATION_JSON).content("{\"pdfUrl\":\"" + url + "\"}"))
+                    .andExpect(status().isBadRequest())
+                    .andExpect(jsonPath("$.error").value("INVALID_REQUEST"));
+        }
+
+        verify(delivery, never()).registerPdf(any(), any(), any());
+    }
+
+    @Test
+    void pdfUrl_onTheObjectStorageHost_isRegistered() throws Exception {
+        mvc.perform(post("/internal/tickets/{id}/pdf", ticketId)
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"pdfUrl\":\"http://rustfs:9000/tickets/tickets/r/t.pdf\"}"))
+                .andExpect(status().isOk());
+
+        verify(delivery).registerPdf(eq(ticketId), eq("http://rustfs:9000/tickets/tickets/r/t.pdf"), any());
+    }
+
+    @Test
     void unknownTicket_isNotFound() throws Exception {
         doThrow(new TicketNotFoundException(ticketId)).when(delivery).registerPdf(eq(ticketId), any(), any());
 
         mvc.perform(post("/internal/tickets/{id}/pdf", ticketId)
-                        .contentType(MediaType.APPLICATION_JSON).content("{\"pdfUrl\":\"https://files.example.com/a.pdf\"}"))
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"pdfUrl\":\"s3://tickets/tickets/r/t.pdf\"}"))
                 .andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.error").value("TICKET_NOT_FOUND"));
     }
