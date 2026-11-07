@@ -8,7 +8,10 @@ import com.cinesync.ticketing.core.model.TicketingFulfillment;
 import com.cinesync.ticketing.core.model.UserContact;
 import com.cinesync.ticketing.core.port.in.BookingConfirmation;
 import com.cinesync.ticketing.core.port.in.ReservationExpiration;
+import com.cinesync.ticketing.core.port.in.ReservationHold;
 import com.cinesync.ticketing.core.port.in.TicketingCommandUseCase;
+import com.cinesync.ticketing.core.model.HeldReservation;
+import com.cinesync.ticketing.core.port.out.HeldReservationRepository;
 import com.cinesync.ticketing.core.port.out.InboxEventRepository;
 import com.cinesync.ticketing.core.port.out.PendingConcessionOrderRepository;
 import com.cinesync.ticketing.core.port.out.TicketRepository;
@@ -21,6 +24,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Clock;
 import java.time.Instant;
 import java.util.*;
 import java.util.stream.Collectors;
@@ -37,6 +41,8 @@ public class TicketingCommandService implements TicketingCommandUseCase {
     private final PendingConcessionOrderRepository pendingConcessionOrderRepository;
     private final ObjectMapper objectMapper;
     private final NotificationRecorder notificationRecorder;
+    private final HeldReservationRepository heldReservationRepository;
+    private final Clock clock;
 
     @Override
     @Transactional
@@ -100,6 +106,7 @@ public class TicketingCommandService implements TicketingCommandUseCase {
 
         ticket = ticketRepository.save(ticket);
         notificationRecorder.record(Notification.bookingConfirmed(ticket));
+        resolveHold(reservationId);
 
         // Merge any pending concessions that arrived before BookingConfirmed (order doesn't matter)
         mergePendingConcessions(reservationId, ticket);
@@ -125,6 +132,33 @@ public class TicketingCommandService implements TicketingCommandUseCase {
         ticketRepository.lockReservation(reservationId);
         notificationRecorder.record(Notification.reservationExpired(expiration.userId(), reservationId,
                 expiration.showtimeId(), expiration.seatNumbers(), expiration.expiredAt()));
+        resolveHold(reservationId);
+    }
+
+    @Override
+    @Transactional
+    public void handleReservationHeld(ReservationHold hold, String correlationId) {
+        UUID reservationId = hold.reservationId();
+        log.info("Processing ReservationHeld: reservationId={}, correlationId={}", reservationId, correlationId);
+        if (hold.expiresAt() == null) {
+            log.info("ReservationHeld of reservationId {} has no expiresAt (published before the field), not stored", reservationId);
+            return;
+        }
+        ticketRepository.lockReservation(reservationId);
+        if (heldReservationRepository.findByReservationId(reservationId).isPresent()) {
+            log.info("Hold already stored for reservationId: {}", reservationId);
+            return;
+        }
+        heldReservationRepository.save(HeldReservation.of(reservationId, hold.userId(), hold.showtimeId(),
+                hold.seatNumbers(), hold.expiresAt()));
+    }
+
+    /** The reservation was confirmed or expired: its hold, if Ticketing knows it, has nothing left to warn about (ADR-068). */
+    private void resolveHold(UUID reservationId) {
+        heldReservationRepository.findByReservationId(reservationId).ifPresent(hold -> {
+            hold.resolve(clock.instant());
+            heldReservationRepository.save(hold);
+        });
     }
 
     @Override

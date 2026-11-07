@@ -96,8 +96,10 @@ public class TicketingConfiguration {
             @Value("${ticketing.rabbitmq.queue.concession-order-confirmed}") String concessionOrderConfirmedQueue,
             @Value("${ticketing.rabbitmq.queue.ticket-issued}") String ticketIssuedQueue,
             @Value("${ticketing.rabbitmq.queue.reservation-expired}") String reservationExpiredQueue,
+            @Value("${ticketing.rabbitmq.queue.reservation-held}") String reservationHeldQueue,
             @Value("${ticketing.rabbitmq.routing-key.booking-confirmed}") String bookingConfirmedRoutingKey,
             @Value("${ticketing.rabbitmq.routing-key.reservation-expired}") String reservationExpiredRoutingKey,
+            @Value("${ticketing.rabbitmq.routing-key.reservation-held}") String reservationHeldRoutingKey,
             @Value("${ticketing.rabbitmq.routing-key.user-registered}") String userRegisteredRoutingKey,
             @Value("${ticketing.rabbitmq.routing-key.user-email-changed}") String userEmailChangedRoutingKey
     ) {
@@ -117,6 +119,8 @@ public class TicketingConfiguration {
         Queue bookingConfirmedDlq = new Queue(bookingConfirmedQueue + DLQ_SUFFIX, true);
         Queue reservationExpired = durableWithDeadLetter(reservationExpiredQueue);
         Queue reservationExpiredDlq = new Queue(reservationExpiredQueue + DLQ_SUFFIX, true);
+        Queue reservationHeld = durableWithDeadLetter(reservationHeldQueue);
+        Queue reservationHeldDlq = new Queue(reservationHeldQueue + DLQ_SUFFIX, true);
         Queue concessionOrderConfirmed = durableWithDeadLetter(concessionOrderConfirmedQueue);
         Queue concessionOrderConfirmedDlq = new Queue(concessionOrderConfirmedQueue + DLQ_SUFFIX, true);
 
@@ -137,12 +141,15 @@ public class TicketingConfiguration {
         Binding d5 = BindingBuilder.bind(ticketIssuedDlq).to(dlxExchange).with(ticketIssuedQueue + DLQ_SUFFIX);
         Binding b6 = BindingBuilder.bind(reservationExpired).to(mainExchange).with(reservationExpiredRoutingKey);
         Binding d6 = BindingBuilder.bind(reservationExpiredDlq).to(dlxExchange).with(reservationExpiredQueue + DLQ_SUFFIX);
+        Binding b7 = BindingBuilder.bind(reservationHeld).to(mainExchange).with(reservationHeldRoutingKey);
+        Binding d7 = BindingBuilder.bind(reservationHeldDlq).to(dlxExchange).with(reservationHeldQueue + DLQ_SUFFIX);
 
         return new Declarables(
                 userRegistered, userEmailChanged, bookingConfirmed, concessionOrderConfirmed, ticketIssued, reservationExpired,
+                reservationHeld,
                 userRegisteredDlq, userEmailChangedDlq, bookingConfirmedDlq, concessionOrderConfirmedDlq, ticketIssuedDlq,
-                reservationExpiredDlq,
-                b1, b2, b3, b4, b5, b6, d1, d2, d3, d4, d5, d6
+                reservationExpiredDlq, reservationHeldDlq,
+                b1, b2, b3, b4, b5, b6, b7, d1, d2, d3, d4, d5, d6, d7
         );
     }
 
