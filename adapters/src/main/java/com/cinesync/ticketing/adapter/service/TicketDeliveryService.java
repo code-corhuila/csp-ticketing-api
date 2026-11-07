@@ -101,7 +101,14 @@ public class TicketDeliveryService implements TicketDeliveryUseCase {
         int failed = 0;
         for (UUID fulfillmentId : fulfillmentRepository.findDeliverable(clock.instant(), limit).stream()
                 .map(TicketingFulfillment::getId).toList()) {
-            Optional<TicketingFulfillment.FulfillmentStatus> status = transaction.execute(tx -> dispatch(fulfillmentId));
+            Optional<TicketingFulfillment.FulfillmentStatus> status;
+            try {
+                status = transaction.execute(tx -> dispatch(fulfillmentId));
+            } catch (RuntimeException e) {
+                // Its transaction is rolled back, so it stays due; the rest of the run must not depend on it.
+                log.warn("Fulfillment {} could not be processed, skipping: {}", fulfillmentId, e.getClass().getSimpleName());
+                continue;
+            }
             if (status.isEmpty()) {
                 log.info("Fulfillment {} is taken by another run or no longer due, skipping", fulfillmentId);
                 continue;
@@ -123,7 +130,8 @@ public class TicketDeliveryService implements TicketDeliveryUseCase {
             return Optional.empty();
         }
         TicketingFulfillment fulfillment = claimed.get();
-        Ticket ticket = ticketRepository.findById(fulfillment.getTicketId()).orElseThrow();
+        Ticket ticket = ticketRepository.findById(fulfillment.getTicketId())
+                .orElseThrow(() -> new TicketNotFoundException(fulfillment.getTicketId()));
         Optional<UserContact> contact = userContactRepository.findByUserId(ticket.getUserId());
         if (contact.isEmpty()) {
             fulfillment.recordFailedAttempt("The contact of the user is not known yet", now);
