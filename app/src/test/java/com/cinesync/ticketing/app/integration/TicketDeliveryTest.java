@@ -19,6 +19,7 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.jdbc.core.JdbcTemplate;
 
+import java.sql.Timestamp;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
@@ -286,8 +287,9 @@ class TicketDeliveryTest extends ProjectionTestSupport {
         assertThat(delivery.awaitingPdf(2)).hasSize(2);
     }
 
+    /** Due by the clock of the JVM, which is the one the service reads: the clock of the container may differ by seconds. */
     private void makeDue(TicketingFulfillment fulfillment) {
-        jdbc.update("UPDATE ticketing_fulfillment.ticketing_fulfillments SET next_retry_at = now() - interval '1 second' "
-                + "WHERE id = ?", fulfillment.getId());
+        jdbc.update("UPDATE ticketing_fulfillment.ticketing_fulfillments SET next_retry_at = ? WHERE id = ?",
+                Timestamp.from(Instant.now().minusSeconds(60)), fulfillment.getId());
     }
 }
