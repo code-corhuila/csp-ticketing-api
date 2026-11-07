@@ -58,6 +58,10 @@ algorithm are rejected), `exp` and `sub` required, 30 s of clock skew. It starts
 A rejection answers the single error envelope (`UNAUTHORIZED` or `FORBIDDEN`) and never reaches a controller. Everything else, such as
 `/actuator/**`, needs a user token.
 
+## Email relay (SMTP)
+
+The service sends the ticket email through the relay set by `TICKETING_SMTP_HOST`, `TICKETING_SMTP_PORT`, `TICKETING_SMTP_USER` and `TICKETING_SMTP_PASSWORD`, and `/health/ready` reports it as `emailProvider`. A provider needs authentication and STARTTLS, so `TICKETING_SMTP_AUTH` and `TICKETING_SMTP_STARTTLS` default to `true`. The development catcher (Mailpit, profile `mail` of `csp-auth-api`) has neither, so the platform env file of development sets both to `false`; otherwise the health check fails with `no password specified` although the catcher is up.
+
 ## Tests
 
 ```bash
