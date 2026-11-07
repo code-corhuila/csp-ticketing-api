@@ -8,13 +8,15 @@ import org.hibernate.annotations.CreationTimestamp;
 import org.hibernate.annotations.JdbcTypeCode;
 import org.hibernate.type.SqlTypes;
 
+import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
 
 /**
  * A hold announced by Booking with the instant it expires (ReservationHeld, ADR-068). It is kept once per reservation so
- * the reminder can find the holds about to expire. It is resolved when the booking is confirmed or the hold expires.
+ * the reminder can find the holds about to expire. It is resolved when the booking is confirmed or the hold expires, and
+ * warned when its reminder is created; each of the two happens at most once.
  */
 @Entity
 @Table(name = "held_reservation", schema = "ticketing_fulfillment")
@@ -73,4 +75,16 @@ public class HeldReservation {
         }
     }
 
+    public void markWarned(Instant at) {
+        if (warnedAt == null) {
+            warnedAt = at;
+        }
+    }
+
+    /** Whole minutes left at {@code now}, rounded up and never below one, so the reminder never says "0 minutes". */
+    public long minutesLeft(Instant now) {
+        long seconds = Duration.between(now, expiresAt).toSeconds();
+        long minutes = (seconds + 59) / 60;
+        return Math.max(1, minutes);
+    }
 }
