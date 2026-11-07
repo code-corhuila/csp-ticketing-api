@@ -19,6 +19,7 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.jdbc.core.JdbcTemplate;
 
+import java.sql.Timestamp;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
@@ -201,6 +202,45 @@ class TicketDeliveryTest extends ProjectionTestSupport {
     }
 
     @Test
+    void emailFailureThenSuccess_marksTheDeliveryAsSentAndClearsTheError() {
+        UUID userId = UUID.randomUUID();
+        contactFor(userId);
+        TicketingFulfillment fulfillment = pendingFor(ticket(userId, PDF_URL));
+        doThrow(new IllegalStateException("smtp down")).doNothing().when(emailSender).sendTicketEmail(any(), any(), any());
+
+        assertThat(delivery.dispatchDue(10)).isEqualTo(new DispatchResult(0, 1, 0));
+        makeDue(fulfillment);
+        assertThat(delivery.dispatchDue(10)).isEqualTo(new DispatchResult(1, 0, 0));
+
+        TicketingFulfillment reloaded = reload(fulfillment);
+        assertThat(reloaded.getStatus()).isEqualTo(FulfillmentStatus.SENT);
+        assertThat(reloaded.getAttempts()).isEqualTo(1);
+        assertThat(reloaded.getLastError()).isNull();
+        assertThat(reloaded.getNextRetryAt()).isNull();
+        verify(emailSender, times(2)).sendTicketEmail(any(), any(), any());
+    }
+
+    @Test
+    void aDeliveryThatEndsFailed_doesNotBlockTheOthersOfTheSameRun() {
+        UUID failingUser = UUID.randomUUID();
+        contacts.save(UserContact.of(failingUser, "failing@example.com", T0));
+        TicketingFulfillment lastAttempt = fulfillments.save(TicketingFulfillment.builder()
+                .ticketId(ticket(failingUser, PDF_URL).getId()).channel("EMAIL").status(FulfillmentStatus.PENDING)
+                .attempts(TicketingFulfillment.MAX_ATTEMPTS - 1).build());
+        UUID healthyUser = UUID.randomUUID();
+        contactFor(healthyUser);
+        TicketingFulfillment healthy = pendingFor(ticket(healthyUser, PDF_URL));
+        doThrow(new IllegalStateException("smtp rejects it")).when(emailSender)
+                .sendTicketEmail(eq("failing@example.com"), any(), any());
+
+        assertThat(delivery.dispatchDue(10)).isEqualTo(new DispatchResult(1, 0, 1));
+
+        assertThat(reload(lastAttempt).getStatus()).isEqualTo(FulfillmentStatus.FAILED);
+        assertThat(reload(healthy).getStatus()).isEqualTo(FulfillmentStatus.SENT);
+        verify(emailSender).sendTicketEmail(eq("client@example.com"), any(), any());
+    }
+
+    @Test
     void overlappingDispatchRuns_sendEachEmailOnce() throws Exception {
         int tickets = 10;
         for (int i = 0; i < tickets; i++) {
@@ -286,8 +326,9 @@ class TicketDeliveryTest extends ProjectionTestSupport {
         assertThat(delivery.awaitingPdf(2)).hasSize(2);
     }
 
+    /** Due by the clock of the JVM, which is the one the service reads: the clock of the container may differ by seconds. */
     private void makeDue(TicketingFulfillment fulfillment) {
-        jdbc.update("UPDATE ticketing_fulfillment.ticketing_fulfillments SET next_retry_at = now() - interval '1 second' "
-                + "WHERE id = ?", fulfillment.getId());
+        jdbc.update("UPDATE ticketing_fulfillment.ticketing_fulfillments SET next_retry_at = ? WHERE id = ?",
+                Timestamp.from(Instant.now().minusSeconds(60)), fulfillment.getId());
     }
 }

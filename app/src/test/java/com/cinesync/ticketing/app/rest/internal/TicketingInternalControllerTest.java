@@ -1,6 +1,8 @@
 package com.cinesync.ticketing.app.rest.internal;
 
 import com.cinesync.ticketing.core.model.TicketNotFoundException;
+import com.cinesync.ticketing.core.port.in.HoldExpiryWarningUseCase;
+import com.cinesync.ticketing.core.port.in.HoldExpiryWarningUseCase.WarningResult;
 import com.cinesync.ticketing.core.port.in.TicketDeliveryUseCase;
 import com.cinesync.ticketing.core.port.in.TicketDeliveryUseCase.DispatchResult;
 import com.cinesync.ticketing.core.port.in.TicketToRender;
@@ -30,7 +32,9 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 class TicketingInternalControllerTest {
 
     private final TicketDeliveryUseCase delivery = mock(TicketDeliveryUseCase.class);
-    private final MockMvc mvc = MockMvcBuilders.standaloneSetup(new TicketingInternalController(delivery, new PdfUrlPolicy("http://rustfs:9000", "tickets")))
+    private final HoldExpiryWarningUseCase warnings = mock(HoldExpiryWarningUseCase.class);
+    private final MockMvc mvc = MockMvcBuilders.standaloneSetup(new TicketingInternalController(delivery, warnings,
+                    new PdfUrlPolicy("http://rustfs:9000", "tickets")))
             .setMessageConverters(new MappingJackson2HttpMessageConverter(new TicketingConfiguration().objectMapper()))
             .build();
     private final UUID ticketId = UUID.randomUUID();
@@ -131,5 +135,35 @@ class TicketingInternalControllerTest {
         mvc.perform(post("/internal/fulfillments/dispatch").param("limit", "101")).andExpect(status().isBadRequest());
 
         verify(delivery, never()).dispatchDue(any(Integer.class));
+    }
+
+    @Test
+    void holdExpiryWarnings_returnsHowManyWereWarned() throws Exception {
+        when(warnings.warnDue(20)).thenReturn(new WarningResult(3));
+
+        mvc.perform(post("/internal/notifications/hold-expiry-warnings").param("limit", "20"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.warned").value(3));
+    }
+
+    @Test
+    void holdExpiryWarnings_withoutALimit_usesFifty() throws Exception {
+        when(warnings.warnDue(50)).thenReturn(new WarningResult(0));
+
+        mvc.perform(post("/internal/notifications/hold-expiry-warnings"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.warned").value(0));
+    }
+
+    @Test
+    void holdExpiryWarnings_limitOutsideOneToOneHundred_isABadRequestInTheErrorEnvelope() throws Exception {
+        mvc.perform(post("/internal/notifications/hold-expiry-warnings").param("limit", "0"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error").value("INVALID_REQUEST"));
+        mvc.perform(post("/internal/notifications/hold-expiry-warnings").param("limit", "101"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error").value("INVALID_REQUEST"));
+
+        verify(warnings, never()).warnDue(any(Integer.class));
     }
 }

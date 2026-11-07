@@ -4,6 +4,8 @@ import com.cinesync.ticketing.app.rest.TicketPdfController;
 import com.cinesync.ticketing.app.rest.TicketingController;
 import com.cinesync.ticketing.app.rest.internal.PdfUrlPolicy;
 import com.cinesync.ticketing.app.rest.internal.TicketingInternalController;
+import com.cinesync.ticketing.core.port.in.HoldExpiryWarningUseCase;
+import com.cinesync.ticketing.core.port.in.HoldExpiryWarningUseCase.WarningResult;
 import com.cinesync.ticketing.core.port.in.TicketDeliveryUseCase;
 import com.cinesync.ticketing.core.port.in.TicketPdfDownloadUseCase;
 import com.nimbusds.jose.JWSAlgorithm;
@@ -34,7 +36,9 @@ import java.util.List;
 import java.util.UUID;
 
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
@@ -66,6 +70,8 @@ class SecurityConfigurationTest {
     private TicketPdfDownloadUseCase download;
     @MockBean
     private TicketDeliveryUseCase delivery;
+    @MockBean
+    private HoldExpiryWarningUseCase holdExpiryWarnings;
     @MockBean
     private HealthEndpoint health;
 
@@ -244,6 +250,24 @@ class SecurityConfigurationTest {
         mvc.perform(get(AWAITING).header("Authorization", bearer(wrongAudience))).andExpect(status().isUnauthorized());
         mvc.perform(get(AWAITING).header("Authorization", bearer(noAudience))).andExpect(status().isUnauthorized());
         mvc.perform(get(AWAITING).header("Authorization", bearer(listedAudience))).andExpect(status().isOk());
+    }
+
+    @Test
+    void theHoldExpiryWarningsTakeOnlyTheCredentialOfTheWorker() throws Exception {
+        String url = "/internal/notifications/hold-expiry-warnings";
+        when(holdExpiryWarnings.warnDue(50)).thenReturn(new WarningResult(1));
+        String client = sign(userClaims().build(), KEYS);
+        String other = sign(serviceClaims("booking-service").build(), KEYS);
+        String worker = sign(serviceClaims("csp-worker").build(), KEYS);
+
+        mvc.perform(post(url)).andExpect(status().isUnauthorized());
+        mvc.perform(post(url).header("Authorization", bearer(client))).andExpect(status().isUnauthorized());
+        mvc.perform(post(url).header("Authorization", bearer(other))).andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.error").value("FORBIDDEN"));
+        mvc.perform(post(url).header("Authorization", bearer(worker))).andExpect(status().isOk())
+                .andExpect(jsonPath("$.warned").value(1));
+
+        verify(holdExpiryWarnings, times(1)).warnDue(anyInt());
     }
 
     // ---- csp-docs#293: the registration of the PDF is for the allowed services only
