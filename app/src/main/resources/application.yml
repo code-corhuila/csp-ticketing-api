@@ -89,6 +89,9 @@ ticketing:
     bucket: ${OBJECT_STORAGE_BUCKET:tickets}
     # Given to the client so that it never asks for the location of the bucket, which the read-only account may not do.
     region: ${OBJECT_STORAGE_REGION:us-east-1}
+  # How long before a hold expires its reminder is created (ADR-068); the csp-worker job asks for it on a schedule.
+  hold-expiry-warning:
+    lead-seconds: ${HOLD_EXPIRY_WARNING_LEAD_SECONDS:120}
   # Where the email sends the user to download the PDF (ADR-058).
   portal:
     url: ${TICKETING_PORTAL_URL:http://localhost:4200}

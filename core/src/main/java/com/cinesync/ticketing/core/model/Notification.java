@@ -82,6 +82,16 @@ public class Notification {
                         "expiredAt", expiredAt.toString()));
     }
 
+    /** The hold is about to expire: confirm it to keep the seats (HU-TICKETING-005, ADR-068). The text carries no clock time. */
+    public static Notification holdExpiryWarning(HeldReservation hold, Instant now) {
+        long minutes = hold.minutesLeft(now);
+        return new Notification(hold.getUserId(), hold.getReservationId(), NotificationType.HOLD_EXPIRY_WARNING,
+                "Tu reserva vence en menos de " + minutes + (minutes == 1 ? " minuto" : " minutos")
+                        + ": confírmala para no perder tus asientos.",
+                Map.of("reservationId", hold.getReservationId().toString(), "showtimeId", hold.getShowtimeId().toString(),
+                        "expiresAt", hold.getExpiresAt().toString()));
+    }
+
     private static Map<String, String> ticketMetadata(Ticket ticket) {
         return Map.of("reservationId", ticket.getReservationId().toString(), "showtimeId", ticket.getShowtimeId().toString(),
                 "ticketId", String.valueOf(ticket.getId()));

@@ -2,6 +2,8 @@ package com.cinesync.ticketing.app.rest.internal;
 
 import com.cinesync.ticketing.app.rest.ErrorResponse;
 import com.cinesync.ticketing.core.model.TicketNotFoundException;
+import com.cinesync.ticketing.core.port.in.HoldExpiryWarningUseCase;
+import com.cinesync.ticketing.core.port.in.HoldExpiryWarningUseCase.WarningResult;
 import com.cinesync.ticketing.core.port.in.TicketDeliveryUseCase;
 import com.cinesync.ticketing.core.port.in.TicketDeliveryUseCase.DispatchResult;
 import com.cinesync.ticketing.core.port.in.TicketToRender;
@@ -27,6 +29,7 @@ public class TicketingInternalController {
     private static final int MAX_LIMIT = 100;
 
     private final TicketDeliveryUseCase deliveryUseCase;
+    private final HoldExpiryWarningUseCase holdExpiryWarningUseCase;
     private final PdfUrlPolicy pdfUrlPolicy;
 
     @PostMapping("/tickets/{ticketId}/pdf")
@@ -59,6 +62,14 @@ public class TicketingInternalController {
             throw new InvalidRequestException("limit must be between 1 and " + MAX_LIMIT);
         }
         return deliveryUseCase.dispatchDue(limit);
+    }
+
+    @PostMapping("/notifications/hold-expiry-warnings")
+    public WarningResult warnHoldExpiries(@RequestParam(name = "limit", defaultValue = "" + DEFAULT_LIMIT) int limit) {
+        if (limit < 1 || limit > MAX_LIMIT) {
+            throw new InvalidRequestException("limit must be between 1 and " + MAX_LIMIT);
+        }
+        return holdExpiryWarningUseCase.warnDue(limit);
     }
 
     @ExceptionHandler(TicketNotFoundException.class)
