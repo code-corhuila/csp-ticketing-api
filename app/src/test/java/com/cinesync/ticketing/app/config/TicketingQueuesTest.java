@@ -39,8 +39,10 @@ class TicketingQueuesTest {
                 property("queue.concession-order-confirmed"),
                 property("queue.ticket-issued"),
                 property("queue.reservation-expired"),
+                property("queue.reservation-held"),
                 property("routing-key.booking-confirmed"),
                 property("routing-key.reservation-expired"),
+                property("routing-key.reservation-held"),
                 property("routing-key.user-registered"),
                 property("routing-key.user-email-changed"));
     }
@@ -66,7 +68,7 @@ class TicketingQueuesTest {
     void everyQueueDeadLettersToItsOwnDlqThroughTheDeadLetterExchange() {
         List<Queue> mainQueues = queues().stream().filter(queue -> !queue.getName().endsWith(".dlq")).toList();
 
-        assertThat(mainQueues).hasSize(6).allSatisfy(queue -> {
+        assertThat(mainQueues).hasSize(7).allSatisfy(queue -> {
             String dlq = queue.getName() + ".dlq";
             assertThat(queue.getArguments()).containsEntry("x-dead-letter-exchange", "cine.dlx")
                     .containsEntry("x-dead-letter-routing-key", dlq);
@@ -100,6 +102,18 @@ class TicketingQueuesTest {
             assertThat(binding.getDestination()).isEqualTo(queue);
             assertThat(binding.getExchange()).isEqualTo("cine.events");
             assertThat(binding.getRoutingKey()).isEqualTo("cine.booking.reservation-expired.v1");
+        });
+    }
+
+    @Test
+    void theReservationHeldQueueIsBoundToTheRoutingKeyBookingPublishes() {
+        String queue = property("queue.reservation-held");
+
+        assertThat(queue).isEqualTo("cine.ticketing_fulfillment.reservation-held");
+        assertThat(bindings()).anySatisfy(binding -> {
+            assertThat(binding.getDestination()).isEqualTo(queue);
+            assertThat(binding.getExchange()).isEqualTo("cine.events");
+            assertThat(binding.getRoutingKey()).isEqualTo("cine.booking.reservation-held.v1");
         });
     }
 
