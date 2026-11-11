@@ -36,7 +36,7 @@ services:
       # authentication and no TLS, so the platform env file sets both to false there.
       SPRING_MAIL_PROPERTIES_MAIL_SMTP_AUTH: ${TICKETING_SMTP_AUTH:-true}
       SPRING_MAIL_PROPERTIES_MAIL_SMTP_STARTTLS_ENABLE: ${TICKETING_SMTP_STARTTLS:-true}
-      TICKETING_PORTAL_URL: ${TICKETING_PORTAL_URL:-http://localhost:4205}
+      TICKETING_PORTAL_URL: ${TICKETING_PORTAL_URL:-http://localhost:4200}
     expose: ["8084"]
     networks: [platform]
 
