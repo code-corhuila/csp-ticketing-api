@@ -1,0 +1,115 @@
+server:
+  port: 8084
+
+spring:
+  application:
+    name: ticketing-fulfillment-service
+
+  datasource:
+    url: jdbc:postgresql://localhost:5432/csp
+    username: ${DB_USER:ticketing_app}
+    password: ${DB_PASSWORD:ticketing_pass}
+    hikari:
+      schema: ticketing_fulfillment
+
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    show-sql: false
+    properties:
+      hibernate:
+        default_schema: ticketing_fulfillment
+        format_sql: true
+
+  mail:
+    host: ${SMTP_HOST:localhost}
+    port: ${SMTP_PORT:1025}
+    username: ${SMTP_USER:}
+    password: ${SMTP_PASS:}
+    properties:
+      mail:
+        smtp:
+          auth: true
+          starttls:
+            enable: true
+          connectiontimeout: 5000
+          timeout: 5000
+          writetimeout: 5000
+
+  rabbitmq:
+    host: ${RABBITMQ_HOST:localhost}
+    port: ${RABBITMQ_PORT:5672}
+    username: ${RABBITMQ_USER:guest}
+    password: ${RABBITMQ_PASS:guest}
+    virtual-host: ${RABBITMQ_VHOST:/}  # Use %2F in AMQP URL for default vhost
+    connection-timeout: 10000
+    requested-heartbeat: 60
+    listener:
+      simple:
+        # The listeners return normally on success and throw on failure, so the container acks or rejects.
+        acknowledge-mode: auto
+        retry:
+          enabled: true
+          # ADR-007: attempt 2 after 5 s, attempt 3 after 25 s, then the message is dead-lettered
+          initial-interval: 5000
+          max-interval: 25000
+          multiplier: 5
+          max-attempts: 3
+        missing-queues-fatal: false
+        auto-startup: true
+        default-requeue-rejected: false
+
+ticketing:
+  rabbitmq:
+    exchange: cine.events
+    routing-key:
+      user-registered: cine.auth.user-registered.v1
+      user-email-changed: cine.auth.user-email-changed.v1
+      booking-confirmed: cine.booking.booking-confirmed.v1
+      reservation-expired: cine.booking.reservation-expired.v1
+      reservation-held: cine.booking.reservation-held.v1
+      ticket-issued: cine.ticketing_fulfillment.ticket-issued.v1
+      concession-order-confirmed: cine.concessions.order-confirmed.v1
+    queue:
+      user-registered: cine.ticketing_fulfillment.user-registered
+      user-email-changed: cine.ticketing_fulfillment.user-email-changed
+      booking-confirmed: cine.ticketing_fulfillment.booking-confirmed
+      reservation-expired: cine.ticketing_fulfillment.reservation-expired
+      reservation-held: cine.ticketing_fulfillment.reservation-held
+      concession-order-confirmed: cine.ticketing_fulfillment.concession-order-confirmed
+      ticket-issued: cine.ticketing_fulfillment.ticket-issued
+    # Queue declaration at startup (before relay enabled)
+    declare-at-startup: true
+
+  # The bucket of the ticket PDFs (ADR-058). The API only reads it; csp-worker writes it. No default for the secrets.
+  object-storage:
+    url: ${OBJECT_STORAGE_URL:http://rustfs:9000}
+    access-key: ${OBJECT_STORAGE_ACCESS_KEY:}
+    secret-key: ${OBJECT_STORAGE_SECRET_KEY:}
+    bucket: ${OBJECT_STORAGE_BUCKET:tickets}
+    # Given to the client so that it never asks for the location of the bucket, which the read-only account may not do.
+    region: ${OBJECT_STORAGE_REGION:us-east-1}
+  # How long before a hold expires its reminder is created (ADR-068); the csp-worker job asks for it on a schedule.
+  hold-expiry-warning:
+    lead-seconds: ${HOLD_EXPIRY_WARNING_LEAD_SECONDS:120}
+  # Where the email sends the user to download the PDF (ADR-058).
+  portal:
+    url: ${TICKETING_PORTAL_URL:http://localhost:4200}
+
+  jwt:
+    public-key: ${JWT_PUBLIC_KEY:}
+    public-key-file: ${JWT_PUBLIC_KEY_FILE:}
+  # The subjects of the service credentials that may call the internal operations (ADR-056): csp-worker.
+  security:
+    service-subjects: ${SERVICE_SUBJECTS:csp-worker}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+  endpoint:
+    health:
+      show-details: always
+      probes:
+        enabled: true

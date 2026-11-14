@@ -1,0 +1,46 @@
+# This service only. csp-infra includes this file to compose the platform.
+#
+# Every setting is passed from the platform environment (the .env of csp-infra), under domain variable names so that it does not
+# collide with the other services (Annex G). No value and no secret is written in this file. Required: the database login
+# TICKETING_APP_PASSWORD (ticketing_app, never the migration executor), the broker password TICKETING_FULFILLMENT_PASSWORD and the
+# object storage read-only account; the service refuses to start without the JWT public key and the object storage keys.
+name: csp-ticketing-api
+
+services:
+  ticketing-api:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/${PG_DATABASE:?set PG_DATABASE}
+      SPRING_DATASOURCE_USERNAME: ${TICKETING_APP_USER:-ticketing_app}
+      SPRING_DATASOURCE_PASSWORD: ${TICKETING_APP_PASSWORD:?set TICKETING_APP_PASSWORD}
+      JWT_PUBLIC_KEY: ${JWT_PUBLIC_KEY:-}
+      JWT_PUBLIC_KEY_FILE: ${JWT_PUBLIC_KEY_FILE:-}
+      SERVICE_SUBJECTS: ${SERVICE_SUBJECTS:-csp-worker}
+      RABBITMQ_HOST: ${RABBITMQ_HOST:-rabbitmq}
+      RABBITMQ_PORT: ${RABBITMQ_PORT:-5672}
+      RABBITMQ_USER: ${TICKETING_AMQP_USER:-ticketing_fulfillment}
+      RABBITMQ_PASS: ${TICKETING_FULFILLMENT_PASSWORD:?set TICKETING_FULFILLMENT_PASSWORD}
+      RABBITMQ_VHOST: ${RABBITMQ_VHOST:-/}
+      OBJECT_STORAGE_URL: ${OBJECT_STORAGE_URL:-http://rustfs:9000}
+      OBJECT_STORAGE_ACCESS_KEY: ${OBJECT_STORAGE_ACCESS_KEY:?set OBJECT_STORAGE_ACCESS_KEY in .env or in the platform}
+      OBJECT_STORAGE_SECRET_KEY: ${OBJECT_STORAGE_SECRET_KEY:?set OBJECT_STORAGE_SECRET_KEY in .env or in the platform}
+      OBJECT_STORAGE_BUCKET: ${OBJECT_STORAGE_BUCKET:-tickets}
+      OBJECT_STORAGE_REGION: ${OBJECT_STORAGE_REGION:-us-east-1}
+      SMTP_HOST: ${TICKETING_SMTP_HOST:-mailpit}
+      SMTP_PORT: ${TICKETING_SMTP_PORT:-1025}
+      SMTP_USER: ${TICKETING_SMTP_USER:-}
+      SMTP_PASS: ${TICKETING_SMTP_PASSWORD:-}
+      # The mail health check connects with these settings. A real provider needs both (the defaults); the development catcher has no
+      # authentication and no TLS, so the platform env file sets both to false there.
+      SPRING_MAIL_PROPERTIES_MAIL_SMTP_AUTH: ${TICKETING_SMTP_AUTH:-true}
+      SPRING_MAIL_PROPERTIES_MAIL_SMTP_STARTTLS_ENABLE: ${TICKETING_SMTP_STARTTLS:-true}
+      TICKETING_PORTAL_URL: ${TICKETING_PORTAL_URL:-http://localhost:4200}
+    expose: ["8084"]
+    networks: [platform]
+
+networks:
+  platform:
+    name: platform
+    external: true
